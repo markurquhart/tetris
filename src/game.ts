@@ -245,11 +245,12 @@ export class Game {
         this.startGame();
         this.sound.play('select');
       }
-      if (actions.rotateCw || actions.levelUp) {
+      // Level only via dedicated level controls — not rotate/tap
+      if (actions.levelUp) {
         this.selectedLevel = Math.min(9, this.selectedLevel + 1);
         this.sound.play('move');
       }
-      if (actions.rotateCcw || actions.levelDown) {
+      if (actions.levelDown) {
         this.selectedLevel = Math.max(0, this.selectedLevel - 1);
         this.sound.play('move');
       }
@@ -314,57 +315,6 @@ export class Game {
     if (moved && this.isLocking && this.lockMovesRemaining > 0) {
       this.lockCounter = 0;
       this.lockMovesRemaining -= 1;
-    }
-  }
-
-  /** Immediate touch nudge — bypasses the input queue for lower latency. */
-  touchMove(dCol: -1 | 1): boolean {
-    if (this.state !== STATE_PLAYING || !this.currentPiece) return false;
-    if (!this.tryMove(0, dCol)) return false;
-    this.sound.play('move');
-    if (this.isLocking && this.lockMovesRemaining > 0) {
-      this.lockCounter = 0;
-      this.lockMovesRemaining -= 1;
-    }
-    return true;
-  }
-
-  touchRotate(): boolean {
-    if (this.state === STATE_START) {
-      this.selectedLevel = Math.min(9, this.selectedLevel + 1);
-      this.sound.play('move');
-      return true;
-    }
-    if (this.state !== STATE_PLAYING || !this.currentPiece) return false;
-    if (!this.tryRotate(true)) return false;
-    this.sound.play('rotate');
-    if (this.isLocking && this.lockMovesRemaining > 0) {
-      this.lockCounter = 0;
-      this.lockMovesRemaining -= 1;
-    }
-    return true;
-  }
-
-  touchHardDrop(): void {
-    if (this.state === STATE_START) {
-      this.startGame();
-      this.sound.play('select');
-      return;
-    }
-    if (this.state !== STATE_PLAYING || !this.currentPiece) return;
-    this.doHardDrop();
-  }
-
-  touchHold(): void {
-    if (this.state !== STATE_PLAYING) return;
-    this.doHold();
-  }
-
-  touchSoftDropStep(): void {
-    if (this.state !== STATE_PLAYING || !this.currentPiece) return;
-    if (this.tryMove(1, 0)) {
-      this.score += SCORE_SOFT_DROP;
-      this.gravityCounter = 0;
     }
   }
 

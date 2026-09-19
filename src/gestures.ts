@@ -1,31 +1,25 @@
-import type { Game } from './game';
+import type { InputHandler } from './input';
 
-const MOVE_THRESHOLD = 16;
-const TAP_SLOP = 10;
-const FLICK_DISTANCE = 56;
-const FLICK_VELOCITY = 0.45; // px/ms
-const HOLD_MS = 380;
-const SOFT_DROP_EVERY_MS = 16; // ~60Hz while dragging down
-
-export interface TouchHooks {
-  unlock: () => void;
-  /** Repaint immediately after a touch action (don't wait for rAF). */
-  paint: () => void;
-}
+const MOVE_THRESHOLD = 28;
+const TAP_SLOP = 12;
+const FLICK_DISTANCE = 70;
+const FLICK_VELOCITY = 0.55; // px/ms
+const HOLD_MS = 420;
 
 /**
- * Low-latency playfield gestures:
- * - tap → rotate CW
+ * Touch / pointer gestures on the playfield:
+ * - tap → rotate CW (or start game on the title screen)
  * - long-press → hold
- * - swipe L/R → move (applied immediately)
+ * - swipe L/R → move (steps as you drag)
  * - drag down → soft drop
  * - flick down → hard drop
  * - swipe up → hold
  */
 export function bindPlayfieldGestures(
   surface: HTMLElement,
-  game: Game,
-  hooks: TouchHooks,
+  input: InputHandler,
+  onGesture: () => void,
+  isTitleScreen: () => boolean,
 ): void {
   let pointerId: number | null = null;
   let startX = 0;
@@ -34,7 +28,7 @@ export function bindPlayfieldGestures(
   let lastY = 0;
   let startTime = 0;
   let movedCellsX = 0;
-  let lastSoftDropAt = 0;
+  let softDropping = false;
   let holdTimer: number | null = null;
   let longPressed = false;
   let consumed = false;
@@ -46,9 +40,11 @@ export function bindPlayfieldGestures(
     }
   };
 
-  const bump = () => {
-    hooks.unlock();
-    hooks.paint();
+  const endSoftDrop = () => {
+    if (softDropping) {
+      input.setHeld('down', false);
+      softDropping = false;
+    }
   };
 
   surface.addEventListener(
@@ -64,21 +60,21 @@ export function bindPlayfieldGestures(
       startY = lastY = e.clientY;
       startTime = performance.now();
       movedCellsX = 0;
-      lastSoftDropAt = startTime;
       longPressed = false;
       consumed = false;
-      hooks.unlock();
+      endSoftDrop();
+      onGesture();
 
       clearHoldTimer();
       holdTimer = window.setTimeout(() => {
-        if (pointerId === null || consumed) return;
+        if (pointerId === null || consumed || isTitleScreen()) return;
         const dx = lastX - startX;
         const dy = lastY - startY;
         if (Math.hypot(dx, dy) < TAP_SLOP) {
           longPressed = true;
           consumed = true;
-          game.touchHold();
-          bump();
+          input.trigger('hold');
+          onGesture();
         }
       }, HOLD_MS);
     },
@@ -91,7 +87,6 @@ export function bindPlayfieldGestures(
       if (e.pointerId !== pointerId) return;
       e.preventDefault();
 
-      const now = performance.now();
       lastX = e.clientX;
       lastY = e.clientY;
       const dx = e.clientX - startX;
@@ -103,28 +98,30 @@ export function bindPlayfieldGestures(
         clearHoldTimer();
       }
 
-      // Horizontal steps — apply immediately
-      if (absX > absY && absX >= MOVE_THRESHOLD * 0.7) {
+      if (isTitleScreen()) return;
+
+      // Horizontal steps
+      if (absX > absY && absX >= MOVE_THRESHOLD) {
         const cells = Math.floor(absX / MOVE_THRESHOLD);
-        let painted = false;
         while (movedCellsX < cells) {
-          const ok = game.touchMove(dx < 0 ? -1 : 1);
+          if (dx < 0) input.triggerMoveLeft();
+          else input.triggerMoveRight();
           movedCellsX += 1;
           consumed = true;
-          if (ok) painted = true;
-          else break;
+          onGesture();
         }
-        if (painted) bump();
       }
 
-      // Soft drop while dragging down — step at ~60Hz, not waiting on game DAS
-      if (dy > MOVE_THRESHOLD * 0.75 && absY >= absX) {
-        consumed = true;
-        if (now - lastSoftDropAt >= SOFT_DROP_EVERY_MS) {
-          lastSoftDropAt = now;
-          game.touchSoftDropStep();
-          bump();
+      // Soft drop while dragging down
+      if (dy > MOVE_THRESHOLD && absY >= absX) {
+        if (!softDropping) {
+          softDropping = true;
+          input.setHeld('down', true);
+          consumed = true;
+          onGesture();
         }
+      } else if (softDropping && dy < MOVE_THRESHOLD * 0.5) {
+        endSoftDrop();
       }
     },
     { passive: false },
@@ -143,30 +140,35 @@ export function bindPlayfieldGestures(
     const absY = Math.abs(dy);
 
     clearHoldTimer();
+    endSoftDrop();
 
     if (!longPressed && !consumed) {
       if (dist < TAP_SLOP) {
-        game.touchRotate();
-        bump();
-      } else if (dy < -MOVE_THRESHOLD && absY > absX) {
-        game.touchHold();
-        bump();
+        // Title screen: tap starts — never changes level
+        if (isTitleScreen()) input.trigger('start');
+        else input.trigger('rotateCw');
+        onGesture();
+      } else if (!isTitleScreen() && dy < -MOVE_THRESHOLD && absY > absX) {
+        input.trigger('hold');
+        onGesture();
       } else if (
+        !isTitleScreen() &&
         dy > FLICK_DISTANCE &&
         absY > absX &&
-        (velocity >= FLICK_VELOCITY || dy > FLICK_DISTANCE * 1.3)
+        (velocity >= FLICK_VELOCITY || dy > FLICK_DISTANCE * 1.4)
       ) {
-        game.touchHardDrop();
-        bump();
+        input.trigger('hardDrop');
+        onGesture();
       }
     } else if (
       !longPressed &&
+      !isTitleScreen() &&
       dy > FLICK_DISTANCE &&
       absY > absX &&
       velocity >= FLICK_VELOCITY
     ) {
-      game.touchHardDrop();
-      bump();
+      input.trigger('hardDrop');
+      onGesture();
     }
 
     pointerId = null;
