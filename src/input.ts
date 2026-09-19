@@ -91,10 +91,12 @@ export class InputHandler {
         this.downHeld = true;
         this.downDasCounter = 0;
         this.downInitialMove = false;
+        this.levelDown = true;
         break;
       case 'ArrowUp':
       case 'KeyX':
         this.rotateCw = true;
+        this.levelUp = true;
         break;
       case 'KeyZ':
         this.rotateCcw = true;
