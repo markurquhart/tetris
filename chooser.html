@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pick a UI — Def Not Tetris</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@500;700&family=Syne:wght@700;800&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0b0d10;
+        --card: #14181f;
+        --line: #2a313c;
+        --ink: #eef2f7;
+        --muted: #9aa3b2;
+        --accent: #5ee0c4;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100dvh;
+        font-family: 'DM Sans', system-ui, sans-serif;
+        background:
+          radial-gradient(900px 500px at 10% -10%, #1c2a28 0%, transparent 55%),
+          var(--bg);
+        color: var(--ink);
+        padding: 28px 18px 48px;
+      }
+      .wrap { max-width: 1100px; margin: 0 auto; }
+      h1 {
+        font-family: Syne, sans-serif;
+        font-size: clamp(1.8rem, 4vw, 2.6rem);
+        margin: 0 0 8px;
+        letter-spacing: -0.03em;
+      }
+      .lede {
+        color: var(--muted);
+        max-width: 42rem;
+        line-height: 1.5;
+        margin: 0 0 28px;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+        gap: 14px;
+      }
+      a.card {
+        display: grid;
+        gap: 10px;
+        text-decoration: none;
+        color: inherit;
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        padding: 14px;
+        transition: transform 0.15s ease, border-color 0.15s ease;
+      }
+      a.card:hover {
+        transform: translateY(-2px);
+        border-color: var(--accent);
+      }
+      .swatch {
+        height: 88px;
+        border-radius: 10px;
+        border: 1px solid rgba(255,255,255,0.08);
+      }
+      .num {
+        font-size: 0.75rem;
+        letter-spacing: 0.12em;
+        color: var(--accent);
+        text-transform: uppercase;
+      }
+      .name { font-weight: 700; font-size: 1.05rem; }
+      .desc { color: var(--muted); font-size: 0.9rem; line-height: 1.4; margin: 0; }
+      .note {
+        margin-top: 28px;
+        padding: 14px 16px;
+        border-radius: 12px;
+        border: 1px dashed var(--line);
+        color: var(--muted);
+        font-size: 0.92rem;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>Pick a UI</h1>
+      <p class="lede">
+        Ten local-only looks for Def Not Tetris. Open each, play for a bit, then tell me the number
+        to ship live. Your choice is remembered in this browser while you compare.
+      </p>
+      <div class="grid" id="grid"></div>
+      <p class="note">
+        Tip: keep this tab open. After you pick a favorite, say e.g. “ship #4” and I’ll lock that
+        in and push it.
+      </p>
+    </div>
+    <script type="module">
+      const themes = [
+        {
+          id: 1,
+          name: 'Void',
+          desc: 'Almost no chrome — just the board and a tiny floating bar.',
+          swatch: 'linear-gradient(160deg,#050505,#111 40%,#1a1a1a)',
+        },
+        {
+          id: 2,
+          name: 'Handheld',
+          desc: 'Chunky portable shell, olive body, inset screen.',
+          swatch: 'linear-gradient(160deg,#3f4a32,#6b7a52 45%,#2a3324)',
+        },
+        {
+          id: 3,
+          name: 'Terminal',
+          desc: 'Phosphor green console. Monospace, no decoration.',
+          swatch: 'linear-gradient(160deg,#020803,#0a1a0c 50%,#163b1c)',
+        },
+        {
+          id: 4,
+          name: 'Scoreboard',
+          desc: 'Sports-bar TV: big stats up top, game dead center.',
+          swatch: 'linear-gradient(160deg,#101820,#1e3a5f 40%,#c45c26)',
+        },
+        {
+          id: 5,
+          name: 'Paper',
+          desc: 'Clean light UI, ink blue accents, quiet and product-y.',
+          swatch: 'linear-gradient(160deg,#f4f6f8,#d9e2ec 50%,#1d4e89)',
+        },
+        {
+          id: 6,
+          name: 'Foundry',
+          desc: 'Industrial steel plates, hazard stripes, heavy type.',
+          swatch: 'linear-gradient(160deg,#1a1c1e,#4a4e54 40%,#e0b400)',
+        },
+        {
+          id: 7,
+          name: 'Poster',
+          desc: 'Full-bleed night atmosphere, typographic title lockup.',
+          swatch: 'linear-gradient(160deg,#0b1020,#2a1840 45%,#ff6b4a)',
+        },
+        {
+          id: 8,
+          name: 'Glass Dock',
+          desc: 'Phone-native: board fills the screen, frosted bottom dock.',
+          swatch: 'linear-gradient(180deg,#0e1116 0%,#0e1116 60%,#2a3340)',
+        },
+        {
+          id: 9,
+          name: 'Workbench',
+          desc: 'Wide desktop layout — game left, operator tools right.',
+          swatch: 'linear-gradient(90deg,#12151a 0 55%,#1c2430 55% 100%)',
+        },
+        {
+          id: 10,
+          name: 'Carnival',
+          desc: 'Lit marquee arcade cabinet — bold, theatrical, fun.',
+          swatch: 'linear-gradient(160deg,#2a1018,#5a2030 40%,#ffb000)',
+        },
+      ];
+
+      const grid = document.getElementById('grid');
+      const active = localStorage.getItem('tetris-ui');
+      grid.innerHTML = themes
+        .map(
+          (t) => `
+        <a class="card" href="/?ui=${t.id}" ${active === String(t.id) ? 'style="border-color:var(--accent)"' : ''}>
+          <div class="swatch" style="background:${t.swatch}"></div>
+          <div class="num">UI ${String(t.id).padStart(2, '0')}${active === String(t.id) ? ' · saved' : ''}</div>
+          <div class="name">${t.name}</div>
+          <p class="desc">${t.desc}</p>
+        </a>`,
+        )
+        .join('');
+    </script>
+  </body>
+</html>

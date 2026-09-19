@@ -1,4 +1,5 @@
 import './style.css';
+import './ui-themes.css';
 import { AuthService } from './auth';
 import { FPS, STATE_GAME_OVER, STATE_PAUSED, STATE_START, WINDOW_HEIGHT, WINDOW_WIDTH } from './constants';
 import { Game } from './game';
@@ -7,8 +8,10 @@ import { InputHandler } from './input';
 import { Renderer } from './renderer';
 import { ScoreService } from './scores';
 import { SoundManager } from './sound';
+import { applyUiTheme } from './ui';
 
 preventMobilePageZoom();
+applyUiTheme();
 
 const canvas = document.querySelector<HTMLCanvasElement>('#game')!;
 const ctx = canvas.getContext('2d')!;
@@ -182,6 +185,21 @@ document.querySelector('#btn-level-down')?.addEventListener('click', () => {
 document.querySelector('#btn-pause')?.addEventListener('click', () => input.trigger('pause'));
 document.querySelector('#btn-restart')?.addEventListener('click', () => input.trigger('restart'));
 document.querySelector('#btn-mute')?.addEventListener('click', () => input.trigger('mute'));
+
+const sideStack = document.querySelector<HTMLElement>('#side-stack');
+const scoresToggle = document.querySelector<HTMLButtonElement>('#btn-scores-toggle');
+scoresToggle?.addEventListener('click', () => {
+  if (!sideStack) return;
+  const open = sideStack.classList.toggle('is-open');
+  scoresToggle.textContent = open ? 'CLOSE' : 'SCORES';
+});
+document.addEventListener('click', (e) => {
+  if (!sideStack?.classList.contains('is-open')) return;
+  const target = e.target as Node;
+  if (sideStack.contains(target) || scoresToggle?.contains(target)) return;
+  sideStack.classList.remove('is-open');
+  if (scoresToggle) scoresToggle.textContent = 'SCORES';
+});
 
 let frameAccumulator = 0;
 let lastTime = performance.now();

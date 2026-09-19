@@ -72,6 +72,10 @@ input {
   overflow: auto;
 }
 
+.side-stack {
+  display: contents;
+}
+
 .panel-title {
   font-family: 'Press Start 2P', monospace;
   font-size: 0.62rem;

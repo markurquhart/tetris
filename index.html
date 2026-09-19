@@ -16,20 +16,13 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Chakra+Petch:wght@500;600;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Bebas+Neue&family=DM+Sans:wght@500;700&family=Fraunces:wght@600;700&family=IBM+Plex+Mono:wght@400;600&family=Press+Start+2P&family=Space+Grotesk:wght@500;700&family=Syne:wght@700;800&family=Chakra+Petch:wght@500;600;700&display=swap"
       rel="stylesheet"
     />
     <title>DEF NOT TETRIS</title>
   </head>
   <body>
     <div class="shell">
-      <aside class="rail leaderboard-panel" aria-label="High scores">
-        <div class="panel-title">HI-SCORES</div>
-        <ol id="leaderboard" class="leaderboard">
-          <li class="empty">Waiting for challengers…</li>
-        </ol>
-      </aside>
-
       <main class="cabinet" id="app">
         <header class="topbar">
           <div class="brand">
@@ -74,18 +67,27 @@
             <button type="button" class="dock-btn" id="btn-pause">PAUSE</button>
             <button type="button" class="dock-btn" id="btn-restart">RESET</button>
             <button type="button" class="dock-btn" id="btn-mute">SND</button>
-            <button type="button" class="dock-btn ghost desktop-only" id="btn-scores-toggle" hidden>SCORES</button>
+            <button type="button" class="dock-btn ghost" id="btn-scores-toggle">SCORES</button>
           </div>
           <p class="desktop-hint">Keyboard: arrows · X/Z rotate · Space drop · C hold</p>
         </footer>
       </main>
 
-      <aside class="rail auth-summary" aria-label="Account">
-        <div class="panel-title">OPERATOR</div>
-        <p id="auth-blurb" class="auth-blurb">
-          Sign in to sync one high score across Mac and iPhone.
-        </p>
-        <button type="button" class="dock-btn primary" id="btn-auth-open-side">PLAYER LOGIN</button>
+      <aside class="side-stack" id="side-stack" aria-label="Scores and account">
+        <div class="rail leaderboard-panel" aria-label="High scores">
+          <div class="panel-title">HI-SCORES</div>
+          <ol id="leaderboard" class="leaderboard">
+            <li class="empty">Waiting for challengers…</li>
+          </ol>
+        </div>
+
+        <div class="rail auth-summary" aria-label="Account">
+          <div class="panel-title">OPERATOR</div>
+          <p id="auth-blurb" class="auth-blurb">
+            Sign in to sync one high score across Mac and iPhone.
+          </p>
+          <button type="button" class="dock-btn primary" id="btn-auth-open-side">PLAYER LOGIN</button>
+        </div>
       </aside>
     </div>
 
