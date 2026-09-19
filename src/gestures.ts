@@ -1,7 +1,8 @@
 import type { InputHandler } from './input';
 
-/** Horizontal moves stay calm; flick-down stays easy to register. */
-const MOVE_THRESHOLD = 30;
+/** First L/R step comes sooner; extra steps stay spaced so it doesn't get twitchy. */
+const FIRST_MOVE_PX = 16;
+const STEP_MOVE_PX = 30;
 const TAP_SLOP = 12;
 const FLICK_DISTANCE = 52;
 const FLICK_VELOCITY = 0.4; // px/ms
@@ -147,9 +148,9 @@ export function bindPlayfieldGestures(
 
       if (isTitleScreen()) return;
 
-      // Horizontal steps
-      if (absX > absY && absX >= MOVE_THRESHOLD) {
-        const cells = Math.floor(absX / MOVE_THRESHOLD);
+      // Horizontal: quick first cell, calmer spacing after that
+      if (absX > absY && absX >= FIRST_MOVE_PX) {
+        const cells = 1 + Math.floor((absX - FIRST_MOVE_PX) / STEP_MOVE_PX);
         let stepped = false;
         while (movedCellsX < cells) {
           if (dx < 0) hooks.move(-1);
@@ -162,14 +163,14 @@ export function bindPlayfieldGestures(
       }
 
       // Soft drop while dragging down (held path — not per-pixel)
-      if (dy > MOVE_THRESHOLD && absY >= absX) {
+      if (dy > STEP_MOVE_PX && absY >= absX) {
         if (!softDropping) {
           softDropping = true;
           input.setHeld('down', true);
           consumed = true;
           hooks.unlock();
         }
-      } else if (softDropping && dy < MOVE_THRESHOLD * 0.5) {
+      } else if (softDropping && dy < STEP_MOVE_PX * 0.5) {
         endSoftDrop();
       }
     },
@@ -204,7 +205,7 @@ export function bindPlayfieldGestures(
         if (isTitleScreen()) hooks.start();
         else hooks.rotate();
         bump();
-      } else if (!isTitleScreen() && dy < -MOVE_THRESHOLD && absY > absX) {
+      } else if (!isTitleScreen() && dy < -STEP_MOVE_PX && absY > absX) {
         hooks.hold();
         bump();
       }
