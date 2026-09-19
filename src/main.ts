@@ -143,17 +143,19 @@ authForm.addEventListener('submit', async (e) => {
 window.addEventListener('keydown', (e) => {
   const tag = (e.target as HTMLElement | null)?.tagName;
   if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
 
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) {
     e.preventDefault();
   }
   void sound.unlock();
-  input.handleKeyDown(e.code);
+  input.handleKeyDown(e.code, e);
 });
 
 window.addEventListener('keyup', (e) => {
   const tag = (e.target as HTMLElement | null)?.tagName;
   if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
   input.handleKeyUp(e.code);
 });
 

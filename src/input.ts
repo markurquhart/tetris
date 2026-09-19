@@ -71,7 +71,10 @@ export class InputHandler {
     this.levelDown = false;
   }
 
-  handleKeyDown(code: string): void {
+  handleKeyDown(code: string, event?: KeyboardEvent): void {
+    // Ignore browser/OS shortcuts (Cmd+R refresh, Ctrl+R, etc.)
+    if (event?.metaKey || event?.ctrlKey || event?.altKey) return;
+
     this.anyKey = true;
     switch (code) {
       case 'ArrowLeft':
