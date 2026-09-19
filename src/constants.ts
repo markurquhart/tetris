@@ -35,7 +35,7 @@ export const RED: RGB = [255, 0, 0];
 export const BLUE: RGB = [0, 0, 255];
 export const ORANGE: RGB = [255, 165, 0];
 
-export const GHOST_ALPHA = 80;
+export const GHOST_ALPHA = 110;
 
 export const I_PIECE = 0;
 export const O_PIECE = 1;

@@ -1,10 +1,10 @@
 import type { InputHandler } from './input';
 
-/** Same calm thresholds as before — lag fix is immediate apply, not lower thresholds. */
-const MOVE_THRESHOLD = 28;
+/** Slightly snappier than the calm baseline — still well above the old twitchy values. */
+const MOVE_THRESHOLD = 24;
 const TAP_SLOP = 12;
-const FLICK_DISTANCE = 70;
-const FLICK_VELOCITY = 0.55; // px/ms
+const FLICK_DISTANCE = 52;
+const FLICK_VELOCITY = 0.4; // px/ms
 const HOLD_MS = 420;
 
 export interface GestureHooks {
@@ -41,6 +41,9 @@ export function bindPlayfieldGestures(
   let lastX = 0;
   let lastY = 0;
   let startTime = 0;
+  let sampleX = 0;
+  let sampleY = 0;
+  let sampleTime = 0;
   let movedCellsX = 0;
   let softDropping = false;
   let holdTimer: number | null = null;
@@ -66,6 +69,23 @@ export function bindPlayfieldGestures(
     hooks.paint();
   };
 
+  const isFlickDown = (
+    dx: number,
+    dy: number,
+    avgVelocity: number,
+    recentVelocity: number,
+  ): boolean => {
+    const absX = Math.abs(dx);
+    const absY = Math.abs(dy);
+    if (isTitleScreen()) return false;
+    if (dy < FLICK_DISTANCE || absY < absX * 0.85) return false;
+    return (
+      avgVelocity >= FLICK_VELOCITY ||
+      recentVelocity >= FLICK_VELOCITY ||
+      dy >= FLICK_DISTANCE * 1.25
+    );
+  };
+
   surface.addEventListener(
     'pointerdown',
     (e) => {
@@ -75,9 +95,9 @@ export function bindPlayfieldGestures(
 
       pointerId = e.pointerId;
       surface.setPointerCapture(e.pointerId);
-      startX = lastX = e.clientX;
-      startY = lastY = e.clientY;
-      startTime = performance.now();
+      startX = lastX = sampleX = e.clientX;
+      startY = lastY = sampleY = e.clientY;
+      startTime = sampleTime = performance.now();
       movedCellsX = 0;
       longPressed = false;
       consumed = false;
@@ -106,6 +126,14 @@ export function bindPlayfieldGestures(
       if (e.pointerId !== pointerId) return;
       e.preventDefault();
 
+      const now = performance.now();
+      // Keep a ~40ms trailing sample so flick velocity isn't washed out by a long drag
+      if (now - sampleTime >= 40) {
+        sampleX = lastX;
+        sampleY = lastY;
+        sampleTime = now;
+      }
+
       lastX = e.clientX;
       lastY = e.clientY;
       const dx = e.clientX - startX;
@@ -119,7 +147,7 @@ export function bindPlayfieldGestures(
 
       if (isTitleScreen()) return;
 
-      // Horizontal steps — same distance as before, applied immediately
+      // Horizontal steps
       if (absX > absY && absX >= MOVE_THRESHOLD) {
         const cells = Math.floor(absX / MOVE_THRESHOLD);
         let stepped = false;
@@ -152,18 +180,26 @@ export function bindPlayfieldGestures(
     if (e.pointerId !== pointerId) return;
     e.preventDefault();
 
+    const now = performance.now();
     const dx = e.clientX - startX;
     const dy = e.clientY - startY;
-    const dt = Math.max(1, performance.now() - startTime);
+    const dt = Math.max(1, now - startTime);
     const dist = Math.hypot(dx, dy);
-    const velocity = dist / dt;
+    const avgVelocity = dist / dt;
+    const recentDt = Math.max(1, now - sampleTime);
+    const recentVelocity =
+      Math.hypot(e.clientX - sampleX, e.clientY - sampleY) / recentDt;
     const absX = Math.abs(dx);
     const absY = Math.abs(dy);
 
     clearHoldTimer();
     endSoftDrop();
 
-    if (!longPressed && !consumed) {
+    // Flick wins even if soft-drop already marked the gesture as consumed
+    if (!longPressed && isFlickDown(dx, dy, avgVelocity, recentVelocity)) {
+      hooks.hardDrop();
+      bump();
+    } else if (!longPressed && !consumed) {
       if (dist < TAP_SLOP) {
         if (isTitleScreen()) hooks.start();
         else hooks.rotate();
@@ -171,24 +207,7 @@ export function bindPlayfieldGestures(
       } else if (!isTitleScreen() && dy < -MOVE_THRESHOLD && absY > absX) {
         hooks.hold();
         bump();
-      } else if (
-        !isTitleScreen() &&
-        dy > FLICK_DISTANCE &&
-        absY > absX &&
-        (velocity >= FLICK_VELOCITY || dy > FLICK_DISTANCE * 1.4)
-      ) {
-        hooks.hardDrop();
-        bump();
       }
-    } else if (
-      !longPressed &&
-      !isTitleScreen() &&
-      dy > FLICK_DISTANCE &&
-      absY > absX &&
-      velocity >= FLICK_VELOCITY
-    ) {
-      hooks.hardDrop();
-      bump();
     }
 
     pointerId = null;

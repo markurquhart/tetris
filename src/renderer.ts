@@ -164,9 +164,25 @@ export class Renderer {
   drawGhost(piece: Tetromino | null, ghostRow: number | null): void {
     if (!piece || ghostRow === null) return;
     const cells = piece.getCellsAt(ghostRow, piece.col, piece.rotationState);
+    // Outline-style ghost so dark blues/purples stay readable on black
+    const rim: RGB = [
+      Math.min(255, Math.max(piece.color[0], 90) + 100),
+      Math.min(255, Math.max(piece.color[1], 90) + 100),
+      Math.min(255, Math.max(piece.color[2], 90) + 100),
+    ];
+
     for (const [row, col] of cells) {
       const visibleRow = row - BOARD_HIDDEN_ROWS;
-      if (visibleRow >= 0) this.drawCell(visibleRow, col, piece.color, GHOST_ALPHA);
+      if (visibleRow < 0) continue;
+      const x = BOARD_X + col * CELL_SIZE;
+      const y = BOARD_Y + visibleRow * CELL_SIZE;
+
+      this.ctx.fillStyle = rgb(piece.color, GHOST_ALPHA / 255);
+      this.ctx.fillRect(x + 2, y + 2, CELL_SIZE - 4, CELL_SIZE - 4);
+
+      this.ctx.strokeStyle = rgb(rim, 0.85);
+      this.ctx.lineWidth = 2;
+      this.ctx.strokeRect(x + 1.5, y + 1.5, CELL_SIZE - 3, CELL_SIZE - 3);
     }
   }
 
