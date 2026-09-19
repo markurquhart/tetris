@@ -9,7 +9,7 @@
     <meta name="theme-color" content="#07090d" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="description" content="Arcade Tetris — login, synced scores, leaderboard." />
+    <meta name="description" content="Def Not Tetris — swipe to play, synced high scores." />
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
@@ -22,110 +22,70 @@
     <title>DEF NOT TETRIS</title>
   </head>
   <body>
-    <div class="arcade-room">
-      <div class="floor-glow" aria-hidden="true"></div>
-
-      <aside class="side-panel leaderboard-panel" aria-label="High scores">
+    <div class="shell">
+      <aside class="rail leaderboard-panel" aria-label="High scores">
         <div class="panel-title">HI-SCORES</div>
         <ol id="leaderboard" class="leaderboard">
           <li class="empty">Waiting for challengers…</li>
         </ol>
       </aside>
 
-      <div class="cabinet" id="app">
-        <div class="marquee">
-          <div class="marquee-bulb-row" aria-hidden="true">
-            <span></span><span></span><span></span><span></span><span></span>
-            <span></span><span></span><span></span><span></span><span></span>
+      <main class="cabinet" id="app">
+        <header class="topbar">
+          <div class="brand">
+            <h1>DEF NOT TETRIS</h1>
+            <p id="status-line" class="status-line">Booting…</p>
           </div>
-          <h1 class="marquee-title">DEF NOT TETRIS</h1>
-          <p class="marquee-sub">ARCADE · 1 PLAYER</p>
-          <div class="marquee-bulb-row reverse" aria-hidden="true">
-            <span></span><span></span><span></span><span></span><span></span>
-            <span></span><span></span><span></span><span></span><span></span>
+          <div class="topbar-meta">
+            <div class="stat">
+              <span>BEST</span>
+              <strong id="best-label">0</strong>
+            </div>
+            <div class="stat">
+              <span>PLAYER</span>
+              <strong id="player-label">GUEST</strong>
+            </div>
+            <button type="button" class="chip-btn" id="btn-auth-open">LOGIN</button>
+            <button type="button" class="chip-btn" id="btn-signout" hidden>OUT</button>
           </div>
-        </div>
+        </header>
 
-        <div class="bezel">
-          <div class="bezel-screw tl" aria-hidden="true"></div>
-          <div class="bezel-screw tr" aria-hidden="true"></div>
+        <section class="screen" aria-label="Game">
           <div class="crt">
             <canvas id="game" width="500" height="700" aria-label="Tetris playfield"></canvas>
             <div class="crt-glass" aria-hidden="true"></div>
             <div class="crt-scanlines" aria-hidden="true"></div>
             <div class="crt-vignette" aria-hidden="true"></div>
           </div>
-          <div class="bezel-screw bl" aria-hidden="true"></div>
-          <div class="bezel-screw br" aria-hidden="true"></div>
-        </div>
+        </section>
 
-        <div class="control-deck">
-          <div class="player-strip">
-            <div class="player-chip">
-              <span class="chip-label">PLAYER</span>
-              <strong id="player-label">GUEST</strong>
-            </div>
-            <div class="player-chip">
-              <span class="chip-label">BEST</span>
-              <strong id="best-label">0</strong>
-            </div>
-            <button type="button" class="deck-btn ghost" id="btn-auth-open">LOGIN</button>
-            <button type="button" class="deck-btn ghost" id="btn-signout" hidden>LOGOUT</button>
-          </div>
-
-          <p id="status-line" class="status-line">Booting cabinet…</p>
-
-          <p class="swipe-hint" id="swipe-hint">
-            <strong>Swipe to play</strong> — ←→ move · ↓ soft drop · flick ↓ hard drop · tap rotate · ↑ / hold for HOLD
+        <footer class="dock">
+          <p class="gesture-legend">
+            <span>←→ move</span>
+            <span>↓ soft</span>
+            <span>flick↓ drop</span>
+            <span>tap rotate</span>
+            <span>↑ hold</span>
           </p>
-
-          <div class="button-bank desktop-only">
-            <div class="stick-cluster" aria-label="Movement">
-              <button type="button" class="arcade-btn dir" id="btn-left" aria-label="Left">◀</button>
-              <div class="stick-mid">
-                <button type="button" class="arcade-btn dir" id="btn-soft-drop" aria-label="Soft drop">▼</button>
-              </div>
-              <button type="button" class="arcade-btn dir" id="btn-right" aria-label="Right">▶</button>
-            </div>
-
-            <div class="action-cluster" aria-label="Actions">
-              <button type="button" class="arcade-btn action yellow" id="btn-rotate-ccw" aria-label="Rotate CCW">
-                <span>B</span><small>↺</small>
-              </button>
-              <button type="button" class="arcade-btn action red" id="btn-rotate-cw" aria-label="Rotate CW">
-                <span>A</span><small>↻</small>
-              </button>
-              <button type="button" class="arcade-btn action cyan" id="btn-hard-drop" aria-label="Hard drop">
-                <span>DROP</span>
-              </button>
-              <button type="button" class="arcade-btn action orange" id="btn-hold" aria-label="Hold">
-                <span>HOLD</span>
-              </button>
-            </div>
+          <div class="dock-actions">
+            <button type="button" class="dock-btn primary" id="btn-play">START</button>
+            <button type="button" class="dock-btn" id="btn-level-down">LVL−</button>
+            <button type="button" class="dock-btn" id="btn-level-up">LVL+</button>
+            <button type="button" class="dock-btn" id="btn-pause">PAUSE</button>
+            <button type="button" class="dock-btn" id="btn-restart">RESET</button>
+            <button type="button" class="dock-btn" id="btn-mute">SND</button>
+            <button type="button" class="dock-btn ghost desktop-only" id="btn-scores-toggle" hidden>SCORES</button>
           </div>
+          <p class="desktop-hint">Keyboard: arrows · X/Z rotate · Space drop · C hold</p>
+        </footer>
+      </main>
 
-          <div class="utility-row">
-            <button type="button" class="deck-btn primary pulse" id="btn-play">START</button>
-            <button type="button" class="deck-btn" id="btn-level-down">LVL −</button>
-            <button type="button" class="deck-btn" id="btn-level-up">LVL +</button>
-            <button type="button" class="deck-btn" id="btn-pause">PAUSE</button>
-            <button type="button" class="deck-btn" id="btn-restart">RESET</button>
-            <button type="button" class="deck-btn" id="btn-mute">SOUND</button>
-          </div>
-        </div>
-
-        <div class="cabinet-base">
-          <div class="coin-slot" aria-hidden="true"></div>
-          <span class="coin-label">INSERT COIN · FREE PLAY</span>
-        </div>
-      </div>
-
-      <aside class="side-panel auth-summary" aria-label="Account">
+      <aside class="rail auth-summary" aria-label="Account">
         <div class="panel-title">OPERATOR</div>
         <p id="auth-blurb" class="auth-blurb">
-          Create an account to keep one high score on Mac and iPhone.
+          Sign in to sync one high score across Mac and iPhone.
         </p>
-        <button type="button" class="deck-btn primary" id="btn-auth-open-side">PLAYER LOGIN</button>
+        <button type="button" class="dock-btn primary" id="btn-auth-open-side">PLAYER LOGIN</button>
       </aside>
     </div>
 
@@ -150,9 +110,9 @@
         <p id="auth-error" class="auth-error" role="alert" hidden></p>
 
         <div class="auth-actions">
-          <button type="submit" class="deck-btn primary" id="btn-signin" value="signin">SIGN IN</button>
-          <button type="submit" class="deck-btn" id="btn-signup" value="signup">CREATE</button>
-          <button type="button" class="deck-btn ghost" id="btn-auth-close">CLOSE</button>
+          <button type="submit" class="dock-btn primary" id="btn-signin" value="signin">SIGN IN</button>
+          <button type="submit" class="dock-btn" id="btn-signup" value="signup">CREATE</button>
+          <button type="button" class="dock-btn ghost" id="btn-auth-close">CLOSE</button>
         </div>
       </form>
     </dialog>

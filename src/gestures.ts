@@ -51,6 +51,7 @@ export function bindPlayfieldGestures(
     (e) => {
       if (e.pointerType === 'mouse' && e.button !== 0) return;
       if (pointerId !== null) return;
+      e.preventDefault();
 
       pointerId = e.pointerId;
       surface.setPointerCapture(e.pointerId);
@@ -76,13 +77,14 @@ export function bindPlayfieldGestures(
         }
       }, HOLD_MS);
     },
-    { passive: true },
+    { passive: false },
   );
 
   surface.addEventListener(
     'pointermove',
     (e) => {
       if (e.pointerId !== pointerId) return;
+      e.preventDefault();
 
       lastX = e.clientX;
       lastY = e.clientY;
@@ -119,11 +121,12 @@ export function bindPlayfieldGestures(
         endSoftDrop();
       }
     },
-    { passive: true },
+    { passive: false },
   );
 
   const finish = (e: PointerEvent) => {
     if (e.pointerId !== pointerId) return;
+    e.preventDefault();
 
     const dx = e.clientX - startX;
     const dy = e.clientY - startY;
@@ -170,6 +173,42 @@ export function bindPlayfieldGestures(
     }
   };
 
-  surface.addEventListener('pointerup', finish);
-  surface.addEventListener('pointercancel', finish);
+  surface.addEventListener('pointerup', finish, { passive: false });
+  surface.addEventListener('pointercancel', finish, { passive: false });
+
+  // Extra iOS guards: block pinch + double-tap zoom on the playfield
+  surface.addEventListener(
+    'touchstart',
+    (e) => {
+      if (e.touches.length > 1) e.preventDefault();
+    },
+    { passive: false },
+  );
+  surface.addEventListener(
+    'touchmove',
+    (e) => {
+      e.preventDefault();
+    },
+    { passive: false },
+  );
+}
+
+/** Page-level: stop iOS double-tap zoom outside captured pointers. */
+export function preventMobilePageZoom(): void {
+  document.addEventListener('gesturestart', (e) => e.preventDefault(), { passive: false });
+  document.addEventListener('gesturechange', (e) => e.preventDefault(), { passive: false });
+  document.addEventListener('gestureend', (e) => e.preventDefault(), { passive: false });
+
+  let lastTouchEnd = 0;
+  document.addEventListener(
+    'touchend',
+    (e) => {
+      const now = Date.now();
+      if (now - lastTouchEnd <= 350) {
+        e.preventDefault();
+      }
+      lastTouchEnd = now;
+    },
+    { passive: false },
+  );
 }

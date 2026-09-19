@@ -2,11 +2,13 @@ import './style.css';
 import { AuthService } from './auth';
 import { FPS, STATE_GAME_OVER, STATE_PAUSED, STATE_START, WINDOW_HEIGHT, WINDOW_WIDTH } from './constants';
 import { Game } from './game';
-import { bindPlayfieldGestures } from './gestures';
+import { bindPlayfieldGestures, preventMobilePageZoom } from './gestures';
 import { InputHandler } from './input';
 import { Renderer } from './renderer';
 import { ScoreService } from './scores';
 import { SoundManager } from './sound';
+
+preventMobilePageZoom();
 
 const canvas = document.querySelector<HTMLCanvasElement>('#game')!;
 const ctx = canvas.getContext('2d')!;
@@ -66,7 +68,7 @@ function refreshHud(): void {
     : scores.statusMessage;
   authBlurb.textContent = auth.isSignedIn()
     ? `Signed in as ${auth.displayName}. Scores sync to Mac and iPhone.`
-    : 'Create an account to keep one high score on Mac and iPhone.';
+    : 'Sign in to sync one high score across Mac and iPhone.';
   btnSignOut.hidden = !auth.isSignedIn();
   btnAuthOpen.hidden = auth.isSignedIn();
   if (btnAuthOpenSide) btnAuthOpenSide.hidden = auth.isSignedIn();
@@ -170,34 +172,6 @@ document.querySelector('#btn-level-down')?.addEventListener('click', () => {
 document.querySelector('#btn-pause')?.addEventListener('click', () => input.trigger('pause'));
 document.querySelector('#btn-restart')?.addEventListener('click', () => input.trigger('restart'));
 document.querySelector('#btn-mute')?.addEventListener('click', () => input.trigger('mute'));
-document.querySelector('#btn-hold')?.addEventListener('click', () => input.trigger('hold'));
-document.querySelector('#btn-rotate-cw')?.addEventListener('click', () => input.trigger('rotateCw'));
-document.querySelector('#btn-rotate-ccw')?.addEventListener('click', () => input.trigger('rotateCcw'));
-document.querySelector('#btn-hard-drop')?.addEventListener('click', () => input.trigger('hardDrop'));
-
-function bindHold(id: string, direction: 'left' | 'right' | 'down'): void {
-  const el = document.querySelector<HTMLElement>(id);
-  if (!el) return;
-  const start = (e: Event) => {
-    e.preventDefault();
-    void sound.unlock();
-    el.classList.add('is-pressed');
-    input.setHeld(direction, true);
-  };
-  const end = (e: Event) => {
-    e.preventDefault();
-    el.classList.remove('is-pressed');
-    input.setHeld(direction, false);
-  };
-  el.addEventListener('pointerdown', start);
-  el.addEventListener('pointerup', end);
-  el.addEventListener('pointercancel', end);
-  el.addEventListener('pointerleave', end);
-}
-
-bindHold('#btn-left', 'left');
-bindHold('#btn-right', 'right');
-bindHold('#btn-soft-drop', 'down');
 
 let lastGameOverHandled = false;
 let frameAccumulator = 0;
