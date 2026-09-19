@@ -55,13 +55,13 @@ input {
 .shell {
   height: 100dvh;
   height: 100svh;
-  max-width: 1200px;
+  max-width: 1400px;
   margin: 0 auto;
   display: grid;
-  grid-template-columns: minmax(0, 200px) minmax(0, 1fr) minmax(0, 200px);
-  gap: 16px;
-  padding: 12px;
-  padding-bottom: max(12px, env(safe-area-inset-bottom));
+  grid-template-columns: minmax(0, 180px) minmax(0, 1fr) minmax(0, 180px);
+  gap: 12px;
+  padding: 8px;
+  padding-bottom: max(8px, env(safe-area-inset-bottom));
 }
 
 .rail {
@@ -134,11 +134,11 @@ input {
   min-height: 0;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
-  gap: 8px;
+  gap: 6px;
   background: linear-gradient(180deg, #1a222e, #10161f 30%, #0c1118);
   border: 2px solid var(--line);
   border-radius: 16px;
-  padding: 10px;
+  padding: 8px;
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
 }
 
@@ -233,19 +233,22 @@ input {
   min-height: 0;
   display: grid;
   place-items: center;
+  container-type: size;
   background: #080b10;
   border: 1px solid #1c2430;
   border-radius: 12px;
-  padding: 6px;
+  padding: 2px;
+  overflow: hidden;
 }
 
+/* Largest 500×700 box that fits the available screen area */
 .crt {
   position: relative;
-  width: 100%;
-  height: 100%;
-  max-width: min(100%, calc((100% - 0px) * 500 / 700));
-  aspect-ratio: 500 / 700;
+  width: min(100cqw, calc(100cqh * 500 / 700));
+  height: min(100cqh, calc(100cqw * 700 / 500));
+  max-width: 100%;
   max-height: 100%;
+  aspect-ratio: 500 / 700;
   margin: 0 auto;
   background: var(--crt);
   border-radius: 8px;
@@ -299,27 +302,31 @@ input {
 
 .dock {
   display: grid;
-  gap: 6px;
+  gap: 4px;
 }
 
 .gesture-legend {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px 10px;
+  gap: 4px 8px;
   margin: 0;
   color: var(--muted);
-  font-size: 0.72rem;
+  font-size: 0.65rem;
   letter-spacing: 0.02em;
+  justify-content: center;
 }
 
-.gesture-legend span {
-  white-space: nowrap;
+.dock-btn {
+  flex: 1 0 auto;
+  min-width: 48px;
+  padding: 8px 6px;
+  font-size: 0.72rem;
 }
 
 .dock-actions {
   display: flex;
   flex-wrap: nowrap;
-  gap: 6px;
+  gap: 5px;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
@@ -329,11 +336,8 @@ input {
   display: none;
 }
 
-.dock-btn {
-  flex: 1 0 auto;
-  min-width: 52px;
-  padding: 10px 8px;
-  font-size: 0.78rem;
+.gesture-legend span {
+  white-space: nowrap;
 }
 
 .desktop-hint {
@@ -407,13 +411,13 @@ input {
   font-size: 0.85rem;
 }
 
-/* Phone / narrow: one column, everything in the viewport */
+/* Phone / narrow: one column, maximize playfield */
 @media (max-width: 900px) {
   .shell {
     grid-template-columns: 1fr;
     gap: 0;
-    padding: 8px;
-    padding-top: max(8px, env(safe-area-inset-top));
+    padding: 4px;
+    padding-top: max(4px, env(safe-area-inset-top));
   }
 
   .rail {
@@ -422,13 +426,22 @@ input {
 
   .cabinet {
     height: 100%;
-    border-radius: 12px;
-    padding: 8px;
-    gap: 6px;
+    border-radius: 10px;
+    padding: 4px;
+    gap: 4px;
   }
 
   .topbar {
-    align-items: flex-start;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .brand h1 {
+    font-size: 0.62rem;
+  }
+
+  .status-line {
+    display: none;
   }
 
   .stat:first-child {
@@ -439,8 +452,13 @@ input {
     display: none !important;
   }
 
-  .gesture-legend {
-    font-size: 0.68rem;
+  .screen {
+    padding: 0;
+    border-radius: 8px;
+  }
+
+  .dock-btn {
+    padding: 9px 5px;
   }
 }
 
@@ -454,16 +472,27 @@ input {
   }
 
   body {
-    overflow: auto;
+    overflow: hidden;
   }
 
   .shell {
-    height: auto;
-    min-height: 100dvh;
+    height: 100dvh;
+    height: 100svh;
     align-items: stretch;
   }
 
   .cabinet {
-    min-height: min(920px, calc(100dvh - 24px));
+    min-height: 0;
+    height: 100%;
+  }
+
+  .screen {
+    min-height: 0;
+  }
+
+  .crt {
+    /* Fill available height/width — no artificial 560px cap */
+    width: min(100cqw, calc(100cqh * 500 / 700));
+    height: min(100cqh, calc(100cqw * 700 / 500));
   }
 }
