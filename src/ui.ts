@@ -31,18 +31,7 @@ export function applyUiTheme(): number {
   localStorage.setItem(STORAGE_KEY, String(id));
 
   document.documentElement.dataset.ui = String(id);
-  document.title = id === 7 ? 'DEF NOT TETRIS' : `DEF NOT TETRIS · UI ${String(id).padStart(2, '0')}`;
-  mountUiBadge(id);
+  document.title = 'DEF NOT TETRIS';
+  document.getElementById('ui-preview-badge')?.remove();
   return id;
-}
-
-function mountUiBadge(id: number): void {
-  if (document.getElementById('ui-preview-badge')) return;
-  const theme = UI_THEMES.find((t) => t.id === id);
-  const el = document.createElement('a');
-  el.id = 'ui-preview-badge';
-  el.href = '/chooser.html';
-  el.className = 'ui-preview-badge';
-  el.innerHTML = `<strong>UI ${String(id).padStart(2, '0')}</strong> ${theme?.name ?? ''} · change`;
-  document.body.appendChild(el);
 }
