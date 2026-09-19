@@ -23,8 +23,44 @@ const scores = new ScoreService(auth);
 const game = new Game(sound);
 
 const crt = document.querySelector<HTMLElement>('.crt')!;
-bindPlayfieldGestures(crt, input, () => {
-  void sound.unlock();
+
+let lastGameOverHandled = false;
+let lineClearProgress: number | null = null;
+
+function paint(): void {
+  if (game.state === STATE_START) {
+    renderer.drawStartScreen(
+      game.selectedLevel,
+      auth.displayName.toUpperCase(),
+      auth.isSignedIn() ? 'CLOUD SAVE ON' : 'GUEST PLAY',
+    );
+  } else {
+    renderer.clear();
+    renderer.drawBoardBackground();
+    renderer.drawBoard(game.board, lineClearProgress ?? 0);
+    if (game.state === 'playing' && game.currentPiece) {
+      const ghostRow = game.getGhostRow();
+      if (ghostRow !== null && ghostRow > game.currentPiece.row) {
+        renderer.drawGhost(game.currentPiece, ghostRow);
+      }
+    }
+    renderer.drawPiece(game.currentPiece);
+    renderer.drawNextPanel(game.nextPieces);
+    renderer.drawHoldPanel(game.holdPieceType, game.holdAvailable);
+    renderer.drawScorePanel(game.score, game.highScore, game.level, game.linesCleared);
+    if (game.state === STATE_PAUSED) renderer.drawPauseOverlay();
+    if (game.state === STATE_GAME_OVER) {
+      renderer.drawGameOverOverlay(game.score, game.highScore, game.isNewHighScore);
+    }
+  }
+  renderer.drawSoundIndicator(sound.isEnabled());
+}
+
+bindPlayfieldGestures(crt, game, {
+  unlock: () => {
+    void sound.unlock();
+  },
+  paint,
 });
 
 const playerLabel = document.querySelector<HTMLElement>('#player-label')!;
@@ -175,7 +211,6 @@ document.querySelector('#btn-pause')?.addEventListener('click', () => input.trig
 document.querySelector('#btn-restart')?.addEventListener('click', () => input.trigger('restart'));
 document.querySelector('#btn-mute')?.addEventListener('click', () => input.trigger('mute'));
 
-let lastGameOverHandled = false;
 let frameAccumulator = 0;
 let lastTime = performance.now();
 
@@ -193,7 +228,7 @@ function frame(now: number): void {
 
     const wasGameOver = game.state === STATE_GAME_OVER;
     game.handleInput(actions);
-    const lineClearProgress = game.update();
+    lineClearProgress = game.update();
 
     if (game.state === STATE_GAME_OVER && !wasGameOver && !lastGameOverHandled) {
       lastGameOverHandled = true;
@@ -205,31 +240,9 @@ function frame(now: number): void {
 
     if (game.state === STATE_START) {
       lastGameOverHandled = false;
-      renderer.drawStartScreen(
-        game.selectedLevel,
-        auth.displayName.toUpperCase(),
-        auth.isSignedIn() ? 'CLOUD SAVE ON' : 'GUEST PLAY',
-      );
-    } else {
-      renderer.clear();
-      renderer.drawBoardBackground();
-      renderer.drawBoard(game.board, lineClearProgress ?? 0);
-      if (game.state === 'playing' && game.currentPiece) {
-        const ghostRow = game.getGhostRow();
-        if (ghostRow !== null && ghostRow > game.currentPiece.row) {
-          renderer.drawGhost(game.currentPiece, ghostRow);
-        }
-      }
-      renderer.drawPiece(game.currentPiece);
-      renderer.drawNextPanel(game.nextPieces);
-      renderer.drawHoldPanel(game.holdPieceType, game.holdAvailable);
-      renderer.drawScorePanel(game.score, game.highScore, game.level, game.linesCleared);
-      if (game.state === STATE_PAUSED) renderer.drawPauseOverlay();
-      if (game.state === STATE_GAME_OVER) {
-        renderer.drawGameOverOverlay(game.score, game.highScore, game.isNewHighScore);
-      }
     }
-    renderer.drawSoundIndicator(sound.isEnabled());
+
+    paint();
   }
 
   requestAnimationFrame(frame);

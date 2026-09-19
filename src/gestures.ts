@@ -1,24 +1,31 @@
-import type { InputHandler } from './input';
+import type { Game } from './game';
 
-const MOVE_THRESHOLD = 28;
-const TAP_SLOP = 12;
-const FLICK_DISTANCE = 70;
-const FLICK_VELOCITY = 0.55; // px/ms
-const HOLD_MS = 420;
+const MOVE_THRESHOLD = 16;
+const TAP_SLOP = 10;
+const FLICK_DISTANCE = 56;
+const FLICK_VELOCITY = 0.45; // px/ms
+const HOLD_MS = 380;
+const SOFT_DROP_EVERY_MS = 16; // ~60Hz while dragging down
+
+export interface TouchHooks {
+  unlock: () => void;
+  /** Repaint immediately after a touch action (don't wait for rAF). */
+  paint: () => void;
+}
 
 /**
- * Touch / pointer gestures on the playfield:
+ * Low-latency playfield gestures:
  * - tap → rotate CW
  * - long-press → hold
- * - swipe L/R → move (steps as you drag)
+ * - swipe L/R → move (applied immediately)
  * - drag down → soft drop
  * - flick down → hard drop
  * - swipe up → hold
  */
 export function bindPlayfieldGestures(
   surface: HTMLElement,
-  input: InputHandler,
-  onGesture: () => void,
+  game: Game,
+  hooks: TouchHooks,
 ): void {
   let pointerId: number | null = null;
   let startX = 0;
@@ -27,7 +34,7 @@ export function bindPlayfieldGestures(
   let lastY = 0;
   let startTime = 0;
   let movedCellsX = 0;
-  let softDropping = false;
+  let lastSoftDropAt = 0;
   let holdTimer: number | null = null;
   let longPressed = false;
   let consumed = false;
@@ -39,11 +46,9 @@ export function bindPlayfieldGestures(
     }
   };
 
-  const endSoftDrop = () => {
-    if (softDropping) {
-      input.setHeld('down', false);
-      softDropping = false;
-    }
+  const bump = () => {
+    hooks.unlock();
+    hooks.paint();
   };
 
   surface.addEventListener(
@@ -59,10 +64,10 @@ export function bindPlayfieldGestures(
       startY = lastY = e.clientY;
       startTime = performance.now();
       movedCellsX = 0;
+      lastSoftDropAt = startTime;
       longPressed = false;
       consumed = false;
-      endSoftDrop();
-      onGesture();
+      hooks.unlock();
 
       clearHoldTimer();
       holdTimer = window.setTimeout(() => {
@@ -72,8 +77,8 @@ export function bindPlayfieldGestures(
         if (Math.hypot(dx, dy) < TAP_SLOP) {
           longPressed = true;
           consumed = true;
-          input.trigger('hold');
-          onGesture();
+          game.touchHold();
+          bump();
         }
       }, HOLD_MS);
     },
@@ -86,6 +91,7 @@ export function bindPlayfieldGestures(
       if (e.pointerId !== pointerId) return;
       e.preventDefault();
 
+      const now = performance.now();
       lastX = e.clientX;
       lastY = e.clientY;
       const dx = e.clientX - startX;
@@ -97,28 +103,28 @@ export function bindPlayfieldGestures(
         clearHoldTimer();
       }
 
-      // Horizontal steps
-      if (absX > absY && absX >= MOVE_THRESHOLD) {
+      // Horizontal steps — apply immediately
+      if (absX > absY && absX >= MOVE_THRESHOLD * 0.7) {
         const cells = Math.floor(absX / MOVE_THRESHOLD);
+        let painted = false;
         while (movedCellsX < cells) {
-          if (dx < 0) input.triggerMoveLeft();
-          else input.triggerMoveRight();
+          const ok = game.touchMove(dx < 0 ? -1 : 1);
           movedCellsX += 1;
           consumed = true;
-          onGesture();
+          if (ok) painted = true;
+          else break;
         }
+        if (painted) bump();
       }
 
-      // Soft drop while dragging down
-      if (dy > MOVE_THRESHOLD && absY >= absX) {
-        if (!softDropping) {
-          softDropping = true;
-          input.setHeld('down', true);
-          consumed = true;
-          onGesture();
+      // Soft drop while dragging down — step at ~60Hz, not waiting on game DAS
+      if (dy > MOVE_THRESHOLD * 0.75 && absY >= absX) {
+        consumed = true;
+        if (now - lastSoftDropAt >= SOFT_DROP_EVERY_MS) {
+          lastSoftDropAt = now;
+          game.touchSoftDropStep();
+          bump();
         }
-      } else if (softDropping && dy < MOVE_THRESHOLD * 0.5) {
-        endSoftDrop();
       }
     },
     { passive: false },
@@ -137,22 +143,21 @@ export function bindPlayfieldGestures(
     const absY = Math.abs(dy);
 
     clearHoldTimer();
-    endSoftDrop();
 
     if (!longPressed && !consumed) {
       if (dist < TAP_SLOP) {
-        input.trigger('rotateCw');
-        onGesture();
+        game.touchRotate();
+        bump();
       } else if (dy < -MOVE_THRESHOLD && absY > absX) {
-        input.trigger('hold');
-        onGesture();
+        game.touchHold();
+        bump();
       } else if (
         dy > FLICK_DISTANCE &&
         absY > absX &&
-        (velocity >= FLICK_VELOCITY || dy > FLICK_DISTANCE * 1.4)
+        (velocity >= FLICK_VELOCITY || dy > FLICK_DISTANCE * 1.3)
       ) {
-        input.trigger('hardDrop');
-        onGesture();
+        game.touchHardDrop();
+        bump();
       }
     } else if (
       !longPressed &&
@@ -160,9 +165,8 @@ export function bindPlayfieldGestures(
       absY > absX &&
       velocity >= FLICK_VELOCITY
     ) {
-      // Flick after some soft-drop drag still counts as hard drop
-      input.trigger('hardDrop');
-      onGesture();
+      game.touchHardDrop();
+      bump();
     }
 
     pointerId = null;
@@ -176,7 +180,6 @@ export function bindPlayfieldGestures(
   surface.addEventListener('pointerup', finish, { passive: false });
   surface.addEventListener('pointercancel', finish, { passive: false });
 
-  // Extra iOS guards: block pinch + double-tap zoom on the playfield
   surface.addEventListener(
     'touchstart',
     (e) => {

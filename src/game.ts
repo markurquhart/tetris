@@ -317,6 +317,57 @@ export class Game {
     }
   }
 
+  /** Immediate touch nudge — bypasses the input queue for lower latency. */
+  touchMove(dCol: -1 | 1): boolean {
+    if (this.state !== STATE_PLAYING || !this.currentPiece) return false;
+    if (!this.tryMove(0, dCol)) return false;
+    this.sound.play('move');
+    if (this.isLocking && this.lockMovesRemaining > 0) {
+      this.lockCounter = 0;
+      this.lockMovesRemaining -= 1;
+    }
+    return true;
+  }
+
+  touchRotate(): boolean {
+    if (this.state === STATE_START) {
+      this.selectedLevel = Math.min(9, this.selectedLevel + 1);
+      this.sound.play('move');
+      return true;
+    }
+    if (this.state !== STATE_PLAYING || !this.currentPiece) return false;
+    if (!this.tryRotate(true)) return false;
+    this.sound.play('rotate');
+    if (this.isLocking && this.lockMovesRemaining > 0) {
+      this.lockCounter = 0;
+      this.lockMovesRemaining -= 1;
+    }
+    return true;
+  }
+
+  touchHardDrop(): void {
+    if (this.state === STATE_START) {
+      this.startGame();
+      this.sound.play('select');
+      return;
+    }
+    if (this.state !== STATE_PLAYING || !this.currentPiece) return;
+    this.doHardDrop();
+  }
+
+  touchHold(): void {
+    if (this.state !== STATE_PLAYING) return;
+    this.doHold();
+  }
+
+  touchSoftDropStep(): void {
+    if (this.state !== STATE_PLAYING || !this.currentPiece) return;
+    if (this.tryMove(1, 0)) {
+      this.score += SCORE_SOFT_DROP;
+      this.gravityCounter = 0;
+    }
+  }
+
   update(): number | null {
     if (this.state === STATE_LINE_CLEAR) {
       this.lineClearCounter += 1;
