@@ -429,30 +429,39 @@ html[data-ui='7'] body {
   overflow: hidden;
 }
 
-/* Board column sized to full-height playfield; scores fill the rest */
+/* Full-bleed chrome; game + scores centered as a compact pair */
 html[data-ui='7'] .shell {
   max-width: none !important;
   width: 100%;
   height: 100dvh;
   height: 100svh;
   margin: 0;
-  gap: 0;
-  padding: 0;
-  grid-template-columns: auto minmax(300px, 1fr);
+  gap: 16px;
+  padding: 0 16px;
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
   align-items: stretch;
+  grid-template-columns: none;
 }
 
 html[data-ui='7'] .side-stack {
   display: flex !important;
   flex-direction: column;
   gap: 12px;
-  min-width: 0;
+  flex: 0 0 220px;
+  width: 220px;
+  min-width: 220px;
+  max-width: 220px;
   min-height: 0;
-  height: 100%;
-  padding: 16px;
-  padding-right: max(16px, env(safe-area-inset-right));
+  /* Same height as the playfield beside it */
+  height: min(100dvh - 8px, (100vw - 268px) * 7 / 5);
+  max-height: 100dvh;
+  align-self: center;
+  padding: 14px;
   background: rgba(8, 10, 18, 0.55);
-  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
   backdrop-filter: blur(12px);
   overflow: auto;
 }
@@ -461,7 +470,7 @@ html[data-ui='7'] .rail {
   display: block !important;
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 16px;
+  border-radius: 14px;
   flex: 0 0 auto;
 }
 
@@ -478,24 +487,28 @@ html[data-ui='7'] .cabinet {
   border-radius: 0;
   padding: 0;
   gap: 0;
-  height: 100%;
-  /* Full viewport-tall board, aspect 500×700 — no side letterbox */
-  width: calc(100dvh * 500 / 700);
-  max-width: min(100%, calc(100dvh * 500 / 700));
+  flex: 0 0 auto;
+  height: min(100dvh, (100vw - 268px) * 7 / 5);
+  width: calc(min(100dvh, (100vw - 268px) * 7 / 5) * 500 / 700);
+  max-width: calc(100vw - 268px);
+  align-self: center;
   min-height: 0;
   min-width: 0;
   grid-template-rows: minmax(0, 1fr);
 }
 
 html[data-ui='7'] .topbar {
-  position: absolute;
-  z-index: 5;
+  position: fixed;
+  z-index: 20;
   left: 0;
   right: 0;
   top: 0;
-  padding: 10px 12px 28px;
-  padding-top: max(10px, env(safe-area-inset-top));
-  background: linear-gradient(180deg, rgba(8, 10, 20, 0.88), transparent);
+  width: auto;
+  padding: 12px 18px 32px;
+  padding-top: max(12px, env(safe-area-inset-top));
+  padding-right: max(18px, env(safe-area-inset-right));
+  padding-left: max(18px, env(safe-area-inset-left));
+  background: linear-gradient(180deg, rgba(8, 10, 20, 0.92), transparent);
   pointer-events: none;
 }
 
@@ -529,10 +542,10 @@ html[data-ui='7'] .stat strong {
 
 html[data-ui='7'] .screen {
   border: 0;
-  border-radius: 0;
+  border-radius: 12px;
   padding: 0;
   background: #05070d;
-  box-shadow: none;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4);
   display: block;
   overflow: hidden;
   width: 100%;
@@ -557,13 +570,16 @@ html[data-ui='7'] .crt-scanlines {
 }
 
 html[data-ui='7'] .dock {
-  position: absolute;
-  z-index: 5;
+  position: fixed;
+  z-index: 20;
   left: 0;
   right: 0;
   bottom: 0;
-  padding: 28px 10px max(10px, env(safe-area-inset-bottom));
-  background: linear-gradient(0deg, rgba(8, 10, 20, 0.9), transparent);
+  width: auto;
+  padding: 32px 18px max(12px, env(safe-area-inset-bottom));
+  padding-left: max(18px, env(safe-area-inset-left));
+  padding-right: max(18px, env(safe-area-inset-right));
+  background: linear-gradient(0deg, rgba(8, 10, 20, 0.92), transparent);
 }
 
 html[data-ui='7'] .desktop-hint {
@@ -602,13 +618,23 @@ html[data-ui='7'] #btn-scores-toggle {
 /* Poster mobile: board fills width when taller aspect would letterbox */
 @media (max-width: 900px) {
   html[data-ui='7'] .shell {
+    display: grid;
     grid-template-columns: 1fr !important;
     grid-template-rows: minmax(0, 1fr);
+    padding: 0;
+    gap: 0;
   }
 
   html[data-ui='7'] .cabinet {
     width: 100%;
     max-width: none;
+    height: 100%;
+    align-self: stretch;
+  }
+
+  html[data-ui='7'] .screen {
+    border-radius: 0;
+    box-shadow: none;
   }
 
   html[data-ui='7'] .side-stack {
@@ -619,8 +645,13 @@ html[data-ui='7'] #btn-scores-toggle {
     right: 10px;
     bottom: max(72px, env(safe-area-inset-bottom));
     top: auto;
+    flex: none;
+    width: auto;
+    min-width: 0;
+    max-width: none;
     height: auto;
     max-height: min(55dvh, 420px);
+    align-self: auto;
     padding: 12px;
     border: 1px solid rgba(255, 255, 255, 0.12);
     border-radius: 18px;
