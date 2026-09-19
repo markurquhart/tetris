@@ -318,6 +318,45 @@ export class Game {
     }
   }
 
+  /** Immediate touch nudge — same rules as handleInput, no queue wait. */
+  touchMove(dCol: -1 | 1): boolean {
+    if (this.state !== STATE_PLAYING || !this.currentPiece) return false;
+    if (!this.tryMove(0, dCol)) return false;
+    this.sound.play('move');
+    if (this.isLocking && this.lockMovesRemaining > 0) {
+      this.lockCounter = 0;
+      this.lockMovesRemaining -= 1;
+    }
+    return true;
+  }
+
+  touchRotate(): boolean {
+    if (this.state !== STATE_PLAYING || !this.currentPiece) return false;
+    if (!this.tryRotate(true)) return false;
+    this.sound.play('rotate');
+    if (this.isLocking && this.lockMovesRemaining > 0) {
+      this.lockCounter = 0;
+      this.lockMovesRemaining -= 1;
+    }
+    return true;
+  }
+
+  touchHardDrop(): void {
+    if (this.state !== STATE_PLAYING || !this.currentPiece) return;
+    this.doHardDrop();
+  }
+
+  touchHold(): void {
+    if (this.state !== STATE_PLAYING || !this.currentPiece) return;
+    this.doHold();
+  }
+
+  touchStartFromTitle(): void {
+    if (this.state !== STATE_START) return;
+    this.startGame();
+    this.sound.play('select');
+  }
+
   update(): number | null {
     if (this.state === STATE_LINE_CLEAR) {
       this.lineClearCounter += 1;

@@ -1,10 +1,21 @@
 import type { InputHandler } from './input';
 
+/** Same calm thresholds as before — lag fix is immediate apply, not lower thresholds. */
 const MOVE_THRESHOLD = 28;
 const TAP_SLOP = 12;
 const FLICK_DISTANCE = 70;
 const FLICK_VELOCITY = 0.55; // px/ms
 const HOLD_MS = 420;
+
+export interface GestureHooks {
+  unlock: () => void;
+  paint: () => void;
+  move: (dir: -1 | 1) => void;
+  rotate: () => void;
+  hardDrop: () => void;
+  hold: () => void;
+  start: () => void;
+}
 
 /**
  * Touch / pointer gestures on the playfield:
@@ -14,11 +25,14 @@ const HOLD_MS = 420;
  * - drag down → soft drop
  * - flick down → hard drop
  * - swipe up → hold
+ *
+ * One-shot actions apply immediately + repaint; soft-drop still uses held input
+ * so continuous drag doesn't get twitchy.
  */
 export function bindPlayfieldGestures(
   surface: HTMLElement,
   input: InputHandler,
-  onGesture: () => void,
+  hooks: GestureHooks,
   isTitleScreen: () => boolean,
 ): void {
   let pointerId: number | null = null;
@@ -47,6 +61,11 @@ export function bindPlayfieldGestures(
     }
   };
 
+  const bump = () => {
+    hooks.unlock();
+    hooks.paint();
+  };
+
   surface.addEventListener(
     'pointerdown',
     (e) => {
@@ -63,7 +82,7 @@ export function bindPlayfieldGestures(
       longPressed = false;
       consumed = false;
       endSoftDrop();
-      onGesture();
+      hooks.unlock();
 
       clearHoldTimer();
       holdTimer = window.setTimeout(() => {
@@ -73,8 +92,8 @@ export function bindPlayfieldGestures(
         if (Math.hypot(dx, dy) < TAP_SLOP) {
           longPressed = true;
           consumed = true;
-          input.trigger('hold');
-          onGesture();
+          hooks.hold();
+          bump();
         }
       }, HOLD_MS);
     },
@@ -100,25 +119,27 @@ export function bindPlayfieldGestures(
 
       if (isTitleScreen()) return;
 
-      // Horizontal steps
+      // Horizontal steps — same distance as before, applied immediately
       if (absX > absY && absX >= MOVE_THRESHOLD) {
         const cells = Math.floor(absX / MOVE_THRESHOLD);
+        let stepped = false;
         while (movedCellsX < cells) {
-          if (dx < 0) input.triggerMoveLeft();
-          else input.triggerMoveRight();
+          if (dx < 0) hooks.move(-1);
+          else hooks.move(1);
           movedCellsX += 1;
           consumed = true;
-          onGesture();
+          stepped = true;
         }
+        if (stepped) bump();
       }
 
-      // Soft drop while dragging down
+      // Soft drop while dragging down (held path — not per-pixel)
       if (dy > MOVE_THRESHOLD && absY >= absX) {
         if (!softDropping) {
           softDropping = true;
           input.setHeld('down', true);
           consumed = true;
-          onGesture();
+          hooks.unlock();
         }
       } else if (softDropping && dy < MOVE_THRESHOLD * 0.5) {
         endSoftDrop();
@@ -144,21 +165,20 @@ export function bindPlayfieldGestures(
 
     if (!longPressed && !consumed) {
       if (dist < TAP_SLOP) {
-        // Title screen: tap starts — never changes level
-        if (isTitleScreen()) input.trigger('start');
-        else input.trigger('rotateCw');
-        onGesture();
+        if (isTitleScreen()) hooks.start();
+        else hooks.rotate();
+        bump();
       } else if (!isTitleScreen() && dy < -MOVE_THRESHOLD && absY > absX) {
-        input.trigger('hold');
-        onGesture();
+        hooks.hold();
+        bump();
       } else if (
         !isTitleScreen() &&
         dy > FLICK_DISTANCE &&
         absY > absX &&
         (velocity >= FLICK_VELOCITY || dy > FLICK_DISTANCE * 1.4)
       ) {
-        input.trigger('hardDrop');
-        onGesture();
+        hooks.hardDrop();
+        bump();
       }
     } else if (
       !longPressed &&
@@ -167,8 +187,8 @@ export function bindPlayfieldGestures(
       absY > absX &&
       velocity >= FLICK_VELOCITY
     ) {
-      input.trigger('hardDrop');
-      onGesture();
+      hooks.hardDrop();
+      bump();
     }
 
     pointerId = null;
