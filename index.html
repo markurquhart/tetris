@@ -6,7 +6,7 @@
       name="viewport"
       content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no"
     />
-    <meta name="theme-color" content="#120808" />
+    <meta name="theme-color" content="#07090d" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="description" content="Arcade Tetris — login, synced scores, leaderboard." />
@@ -19,7 +19,7 @@
       href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Chakra+Petch:wght@500;600;700&display=swap"
       rel="stylesheet"
     />
-    <title>TETRIS ARCADE</title>
+    <title>DEF NOT TETRIS</title>
   </head>
   <body>
     <div class="arcade-room">
@@ -38,7 +38,7 @@
             <span></span><span></span><span></span><span></span><span></span>
             <span></span><span></span><span></span><span></span><span></span>
           </div>
-          <h1 class="marquee-title">TETRIS</h1>
+          <h1 class="marquee-title">DEF NOT TETRIS</h1>
           <p class="marquee-sub">ARCADE · 1 PLAYER</p>
           <div class="marquee-bulb-row reverse" aria-hidden="true">
             <span></span><span></span><span></span><span></span><span></span>
@@ -75,7 +75,11 @@
 
           <p id="status-line" class="status-line">Booting cabinet…</p>
 
-          <div class="button-bank">
+          <p class="swipe-hint" id="swipe-hint">
+            <strong>Swipe to play</strong> — ←→ move · ↓ soft drop · flick ↓ hard drop · tap rotate · ↑ / hold for HOLD
+          </p>
+
+          <div class="button-bank desktop-only">
             <div class="stick-cluster" aria-label="Movement">
               <button type="button" class="arcade-btn dir" id="btn-left" aria-label="Left">◀</button>
               <div class="stick-mid">

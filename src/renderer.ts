@@ -103,7 +103,7 @@ export class Renderer {
     this.ctx.fillStyle = '#0b0f16';
     this.ctx.fillRect(BOARD_X - 6, BOARD_Y - 6, BOARD_COLS * CELL_SIZE + 12, BOARD_ROWS * CELL_SIZE + 12);
 
-    this.ctx.strokeStyle = '#ffb000';
+    this.ctx.strokeStyle = '#4ecdc4';
     this.ctx.lineWidth = 2;
     this.ctx.strokeRect(
       BOARD_X - 3,
@@ -192,10 +192,10 @@ export class Renderer {
     }
   }
 
-  private panel(x: number, y: number, w: number, h: number, title: string, titleColor = '#ffb000'): void {
+  private panel(x: number, y: number, w: number, h: number, title: string, titleColor = '#4ecdc4'): void {
     this.ctx.fillStyle = '#0c1018';
     this.ctx.fillRect(x, y, w, h);
-    this.ctx.strokeStyle = '#35e8ff';
+    this.ctx.strokeStyle = '#2a3444';
     this.ctx.lineWidth = 2;
     this.ctx.strokeRect(x, y, w, h);
     this.ctx.fillStyle = titleColor;
@@ -217,7 +217,7 @@ export class Renderer {
       100,
       80,
       'HOLD',
-      holdAvailable ? '#ffb000' : '#666',
+      holdAvailable ? '#4ecdc4' : '#666',
     );
     if (holdPieceType !== null) {
       this.drawPreviewPiece(holdPieceType, HOLD_PANEL_X + 10, HOLD_PANEL_Y + 20);
@@ -227,10 +227,10 @@ export class Renderer {
   drawScorePanel(score: number, highScore: number, level: number, lines: number): void {
     let y = SCORE_PANEL_Y;
     const rows: Array<[string, string, string]> = [
-      ['SCORE', String(score), '#35e8ff'],
-      ['HIGH', String(highScore), '#ffb000'],
-      ['LEVEL', String(level), '#5dff9c'],
-      ['LINES', String(lines), '#f0c000'],
+      ['SCORE', String(score), '#7ef0e8'],
+      ['HIGH', String(highScore), '#f0c14a'],
+      ['LEVEL', String(level), '#6ddea8'],
+      ['LINES', String(lines), '#c8d0dc'],
     ];
     for (const [label, value, color] of rows) {
       this.ctx.fillStyle = '#8a909c';
@@ -249,37 +249,39 @@ export class Renderer {
 
     const blink = Math.floor(this.tick / 30) % 2 === 0;
 
-    this.ctx.fillStyle = '#ffb000';
+    this.ctx.fillStyle = '#7ef0e8';
+    this.ctx.font = `22px ${PIXEL}`;
+    this.ctx.fillText('DEF NOT', WINDOW_WIDTH / 2, 95);
     this.ctx.font = `28px ${PIXEL}`;
-    this.ctx.fillText('TETRIS', WINDOW_WIDTH / 2, 110);
+    this.ctx.fillText('TETRIS', WINDOW_WIDTH / 2, 132);
 
-    this.ctx.fillStyle = '#35e8ff';
+    this.ctx.fillStyle = '#8b97a8';
     this.ctx.font = `10px ${PIXEL}`;
-    this.ctx.fillText('ATTRACT MODE', WINDOW_WIDTH / 2, 145);
+    this.ctx.fillText('ATTRACT MODE', WINDOW_WIDTH / 2, 165);
 
     [0, 1, 2, 3, 4, 5, 6].forEach((pt, i) => {
-      this.drawPreviewPiece(pt as PieceType, 45 + i * 58, 175, 0.55);
+      this.drawPreviewPiece(pt as PieceType, 45 + i * 58, 185, 0.55);
     });
 
-    this.ctx.fillStyle = '#f7f1e8';
+    this.ctx.fillStyle = '#e8eef6';
     this.ctx.font = `12px ${PIXEL}`;
-    this.ctx.fillText(`LEVEL ${selectedLevel}`, WINDOW_WIDTH / 2, 300);
+    this.ctx.fillText(`LEVEL ${selectedLevel}`, WINDOW_WIDTH / 2, 310);
 
-    this.ctx.fillStyle = '#b9a89a';
+    this.ctx.fillStyle = '#8b97a8';
     this.ctx.font = `14px ${UI}`;
-    this.ctx.fillText(`Operator: ${playerName}`, WINDOW_WIDTH / 2, 340);
-    this.ctx.fillText(status, WINDOW_WIDTH / 2, 365);
+    this.ctx.fillText(`Operator: ${playerName}`, WINDOW_WIDTH / 2, 350);
+    this.ctx.fillText(status, WINDOW_WIDTH / 2, 375);
 
     if (blink) {
-      this.ctx.fillStyle = '#ffb000';
+      this.ctx.fillStyle = '#4ecdc4';
       this.ctx.font = `11px ${PIXEL}`;
       this.ctx.fillText('PRESS START', WINDOW_WIDTH / 2, 430);
     }
 
-    this.ctx.fillStyle = '#8a909c';
+    this.ctx.fillStyle = '#8b97a8';
     this.ctx.font = `13px ${UI}`;
-    this.ctx.fillText('↑/Z level · arrows move · A/B rotate · DROP', WINDOW_WIDTH / 2, 480);
-    this.ctx.fillText('Sign in to sync high scores across devices', WINDOW_WIDTH / 2, 505);
+    this.ctx.fillText('Desktop: arrows · X/Z rotate · Space drop', WINDOW_WIDTH / 2, 480);
+    this.ctx.fillText('Phone: swipe on the screen to play', WINDOW_WIDTH / 2, 505);
 
     this.ctx.textAlign = 'left';
   }
@@ -288,10 +290,10 @@ export class Renderer {
     this.ctx.fillStyle = 'rgba(0,0,0,0.72)';
     this.ctx.fillRect(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
     this.ctx.textAlign = 'center';
-    this.ctx.fillStyle = '#ffb000';
+    this.ctx.fillStyle = '#4ecdc4';
     this.ctx.font = `24px ${PIXEL}`;
     this.ctx.fillText('PAUSED', WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2 - 8);
-    this.ctx.fillStyle = '#b9a89a';
+    this.ctx.fillStyle = '#8b97a8';
     this.ctx.font = `14px ${UI}`;
     this.ctx.fillText('Press P / PAUSE to resume', WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2 + 28);
     this.ctx.textAlign = 'left';
@@ -310,15 +312,15 @@ export class Renderer {
     this.ctx.fillText(`SCORE ${score}`, WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2 - 20);
 
     if (isNewHigh) {
-      this.ctx.fillStyle = '#ffb000';
+      this.ctx.fillStyle = '#f0c14a';
       this.ctx.fillText('NEW RECORD!', WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2 + 20);
     } else {
-      this.ctx.fillStyle = '#b9a89a';
+      this.ctx.fillStyle = '#8b97a8';
       this.ctx.font = `14px ${UI}`;
       this.ctx.fillText(`Best ${highScore}`, WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2 + 20);
     }
 
-    this.ctx.fillStyle = '#35e8ff';
+    this.ctx.fillStyle = '#4ecdc4';
     this.ctx.font = `14px ${UI}`;
     this.ctx.fillText('Press R / RESET for another round', WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2 + 70);
     this.ctx.textAlign = 'left';

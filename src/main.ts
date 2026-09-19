@@ -2,6 +2,7 @@ import './style.css';
 import { AuthService } from './auth';
 import { FPS, STATE_GAME_OVER, STATE_PAUSED, STATE_START, WINDOW_HEIGHT, WINDOW_WIDTH } from './constants';
 import { Game } from './game';
+import { bindPlayfieldGestures } from './gestures';
 import { InputHandler } from './input';
 import { Renderer } from './renderer';
 import { ScoreService } from './scores';
@@ -18,6 +19,11 @@ const renderer = new Renderer(ctx);
 const auth = new AuthService();
 const scores = new ScoreService(auth);
 const game = new Game(sound);
+
+const crt = document.querySelector<HTMLElement>('.crt')!;
+bindPlayfieldGestures(crt, input, () => {
+  void sound.unlock();
+});
 
 const playerLabel = document.querySelector<HTMLElement>('#player-label')!;
 const bestLabel = document.querySelector<HTMLElement>('#best-label')!;

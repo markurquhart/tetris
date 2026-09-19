@@ -1,19 +1,20 @@
 :root {
-  --room: #0b0708;
-  --cabinet: #2a1214;
-  --cabinet-edge: #4a1c20;
-  --metal: #1a1a1c;
-  --metal-shine: #3a3a42;
-  --amber: #ffb000;
-  --amber-hot: #ffd56a;
-  --cyan: #35e8ff;
-  --red: #e23b3b;
-  --yellow: #f0c000;
-  --orange: #ff7a18;
-  --ink: #f7f1e8;
-  --muted: #b9a89a;
-  --crt: #04060a;
-  --success: #5dff9c;
+  /* Cool graphite cabinet — classic arcade, not candy */
+  --room: #07090d;
+  --cabinet: #151a22;
+  --cabinet-mid: #1c2430;
+  --cabinet-edge: #2a3444;
+  --metal: #2c3340;
+  --metal-shine: #4a5568;
+  --accent: #4ecdc4;
+  --accent-hot: #7ef0e8;
+  --warn: #f0c14a;
+  --danger: #e85d5d;
+  --ink: #e8eef6;
+  --muted: #8b97a8;
+  --crt: #05070b;
+  --panel: #0e131a;
+  --success: #6ddea8;
   font-family: 'Chakra Petch', system-ui, sans-serif;
   color: var(--ink);
   background: var(--room);
@@ -33,9 +34,9 @@ body {
   min-height: 100dvh;
   overflow-x: hidden;
   background:
-    radial-gradient(ellipse 80% 50% at 50% 0%, #3a1810 0%, transparent 55%),
-    radial-gradient(ellipse 70% 40% at 50% 100%, #12080a 0%, transparent 50%),
-    linear-gradient(180deg, #160c0e 0%, #080506 45%, #050304 100%);
+    radial-gradient(ellipse 90% 55% at 50% -10%, #1a2838 0%, transparent 55%),
+    radial-gradient(ellipse 60% 35% at 50% 100%, #0c1218 0%, transparent 50%),
+    linear-gradient(180deg, #0a0e14 0%, #06080c 50%, #040507 100%);
 }
 
 button,
@@ -61,11 +62,11 @@ input {
   background:
     repeating-linear-gradient(
       90deg,
-      #1a0c10 0 18px,
-      #241018 18px 36px
+      #121820 0 18px,
+      #1a222c 18px 36px
     );
   mask-image: linear-gradient(180deg, transparent, #000 40%);
-  opacity: 0.55;
+  opacity: 0.4;
   pointer-events: none;
   transform: perspective(400px) rotateX(56deg);
   transform-origin: bottom center;
@@ -77,13 +78,13 @@ input {
   width: min(100%, 560px);
   margin-inline: auto;
   background:
-    linear-gradient(180deg, #3b171b 0%, var(--cabinet) 18%, #1c0b0d 100%);
-  border: 3px solid #5a242a;
+    linear-gradient(180deg, #222a36 0%, var(--cabinet-mid) 14%, var(--cabinet) 100%);
+  border: 3px solid var(--cabinet-edge);
   border-radius: 18px 18px 10px 10px;
   box-shadow:
-    0 0 0 4px #120608,
-    0 30px 80px rgba(0, 0, 0, 0.65),
-    inset 0 1px 0 rgba(255, 200, 160, 0.12);
+    0 0 0 4px #05070a,
+    0 30px 80px rgba(0, 0, 0, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
   overflow: hidden;
   animation: cabinet-settle 0.8s ease-out;
 }
@@ -102,23 +103,22 @@ input {
 .marquee {
   text-align: center;
   padding: 16px 12px 12px;
-  background:
-    linear-gradient(180deg, #1a0a0c, #2c1014 40%, #1a0a0c);
-  border-bottom: 2px solid #6b2c34;
+  background: linear-gradient(180deg, #1a222e, #121820 50%, #0e141c);
+  border-bottom: 2px solid #2e3a4a;
   position: relative;
 }
 
 .marquee-title {
   margin: 8px 0 4px;
   font-family: 'Press Start 2P', monospace;
-  font-size: clamp(1.6rem, 6vw, 2.4rem);
-  letter-spacing: 0.12em;
-  color: var(--amber-hot);
+  font-size: clamp(0.85rem, 3.6vw, 1.35rem);
+  letter-spacing: 0.08em;
+  line-height: 1.45;
+  color: var(--accent-hot);
   text-shadow:
-    0 0 8px rgba(255, 176, 0, 0.85),
-    0 0 24px rgba(255, 120, 0, 0.55),
-    0 3px 0 #5a2200;
-  animation: marquee-pulse 2.4s ease-in-out infinite;
+    0 0 10px rgba(78, 205, 196, 0.55),
+    0 2px 0 #0a3a38;
+  animation: marquee-pulse 2.8s ease-in-out infinite;
 }
 
 .marquee-sub {
@@ -126,8 +126,7 @@ input {
   font-family: 'Press Start 2P', monospace;
   font-size: 0.55rem;
   letter-spacing: 0.28em;
-  color: var(--cyan);
-  text-shadow: 0 0 10px rgba(53, 232, 255, 0.55);
+  color: var(--muted);
 }
 
 @keyframes marquee-pulse {
@@ -136,7 +135,7 @@ input {
     filter: brightness(1);
   }
   50% {
-    filter: brightness(1.18);
+    filter: brightness(1.12);
   }
 }
 
@@ -151,9 +150,9 @@ input {
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: radial-gradient(circle at 35% 30%, #fff6c8, var(--amber) 45%, #8a4a00);
-  box-shadow: 0 0 8px rgba(255, 176, 0, 0.7);
-  animation: bulb 1.2s linear infinite;
+  background: radial-gradient(circle at 35% 30%, #e8fffc, var(--accent) 45%, #1a6a66);
+  box-shadow: 0 0 8px rgba(78, 205, 196, 0.45);
+  animation: bulb 1.4s linear infinite;
 }
 
 .marquee-bulb-row span:nth-child(odd) {
@@ -167,7 +166,7 @@ input {
 @keyframes bulb {
   0%,
   100% {
-    opacity: 0.45;
+    opacity: 0.4;
   }
   50% {
     opacity: 1;
@@ -177,11 +176,10 @@ input {
 .bezel {
   margin: 14px 16px 8px;
   padding: 14px;
-  background:
-    linear-gradient(145deg, #2c2c32, #121214 40%, #2a2a30);
+  background: linear-gradient(145deg, #3a4250, #1a1e26 40%, #2e3542);
   border-radius: 14px;
-  border: 2px solid #0a0a0c;
-  box-shadow: inset 0 0 0 3px #3f3f48;
+  border: 2px solid #0a0c10;
+  box-shadow: inset 0 0 0 3px #4a5568;
   position: relative;
 }
 
@@ -190,7 +188,7 @@ input {
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: radial-gradient(circle at 30% 30%, #bbb, #555 60%, #222);
+  background: radial-gradient(circle at 30% 30%, #c8d0dc, #6a7384 60%, #2a303a);
   box-shadow: inset 0 0 2px #000;
 }
 
@@ -207,6 +205,8 @@ input {
   box-shadow:
     inset 0 0 40px rgba(0, 0, 0, 0.85),
     0 0 0 2px #050505;
+  touch-action: none;
+  cursor: crosshair;
 }
 
 #game {
@@ -216,6 +216,7 @@ input {
   image-rendering: pixelated;
   position: relative;
   z-index: 1;
+  touch-action: none;
 }
 
 .crt-glass,
@@ -230,10 +231,10 @@ input {
 .crt-glass {
   background: linear-gradient(
     125deg,
-    rgba(255, 255, 255, 0.12) 0%,
+    rgba(255, 255, 255, 0.1) 0%,
     transparent 28%,
     transparent 70%,
-    rgba(255, 255, 255, 0.05) 100%
+    rgba(255, 255, 255, 0.04) 100%
   );
   mix-blend-mode: screen;
 }
@@ -241,11 +242,11 @@ input {
 .crt-scanlines {
   background: repeating-linear-gradient(
     180deg,
-    rgba(0, 0, 0, 0.18) 0 1px,
+    rgba(0, 0, 0, 0.16) 0 1px,
     transparent 1px 3px
   );
   animation: scan-drift 6s linear infinite;
-  opacity: 0.55;
+  opacity: 0.45;
 }
 
 @keyframes scan-drift {
@@ -258,14 +259,13 @@ input {
 }
 
 .crt-vignette {
-  background: radial-gradient(ellipse at center, transparent 48%, rgba(0, 0, 0, 0.55) 100%);
+  background: radial-gradient(ellipse at center, transparent 48%, rgba(0, 0, 0, 0.5) 100%);
 }
 
 .control-deck {
   padding: 12px 16px 8px;
-  background:
-    linear-gradient(180deg, #1d0d10, #14090b 70%, #0e0608);
-  border-top: 2px solid #4a2228;
+  background: linear-gradient(180deg, #121820, #0a0e14 70%, #070a0e);
+  border-top: 2px solid #2a3444;
 }
 
 .player-strip {
@@ -277,8 +277,8 @@ input {
 }
 
 .player-chip {
-  background: #0c0708;
-  border: 1px solid #5a3036;
+  background: var(--panel);
+  border: 1px solid #2a3444;
   border-radius: 8px;
   padding: 6px 10px;
   min-width: 88px;
@@ -294,15 +294,32 @@ input {
 .player-chip strong {
   font-family: 'Press Start 2P', monospace;
   font-size: 0.58rem;
-  color: var(--amber);
+  color: var(--accent);
 }
 
 .status-line {
   margin: 0 0 12px;
   min-height: 1.2em;
-  color: var(--cyan);
+  color: var(--muted);
   font-size: 0.85rem;
   letter-spacing: 0.04em;
+}
+
+.swipe-hint {
+  display: none;
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px dashed #2a3444;
+  border-radius: 10px;
+  background: rgba(14, 19, 26, 0.8);
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.swipe-hint strong {
+  color: var(--accent);
+  font-weight: 600;
 }
 
 .button-bank {
@@ -317,8 +334,8 @@ input {
   grid-template-columns: 1fr 1fr 1fr;
   gap: 8px;
   align-items: center;
-  background: #0a0506;
-  border: 2px solid #3a2024;
+  background: var(--panel);
+  border: 2px solid #2a3444;
   border-radius: 16px;
   padding: 12px;
 }
@@ -340,27 +357,27 @@ input {
   cursor: pointer;
   touch-action: manipulation;
   user-select: none;
-  color: #120808;
+  color: #0a1018;
   font-weight: 700;
   border-radius: 999px;
   min-height: 56px;
   box-shadow:
-    0 6px 0 rgba(0, 0, 0, 0.55),
-    inset 0 2px 0 rgba(255, 255, 255, 0.35);
-  transition: transform 0.05s ease, box-shadow 0.05s ease, filter 0.15s ease;
+    0 6px 0 rgba(0, 0, 0, 0.45),
+    inset 0 2px 0 rgba(255, 255, 255, 0.28);
+  transition: transform 0.05s ease, box-shadow 0.05s ease;
 }
 
 .arcade-btn:active,
 .arcade-btn.is-pressed {
   transform: translateY(4px);
   box-shadow:
-    0 2px 0 rgba(0, 0, 0, 0.55),
-    inset 0 2px 0 rgba(255, 255, 255, 0.2);
+    0 2px 0 rgba(0, 0, 0, 0.45),
+    inset 0 2px 0 rgba(255, 255, 255, 0.15);
 }
 
 .arcade-btn.dir {
-  background: radial-gradient(circle at 35% 30%, #6a6a78, #2c2c36 70%);
-  color: #eee;
+  background: radial-gradient(circle at 35% 30%, #7a8494, #3a4454 70%);
+  color: #e8eef6;
   font-size: 1.1rem;
 }
 
@@ -379,22 +396,22 @@ input {
 }
 
 .arcade-btn.red {
-  background: radial-gradient(circle at 35% 30%, #ff7a7a, var(--red) 60%, #7a1010);
+  background: radial-gradient(circle at 35% 30%, #ff9a9a, var(--danger) 60%, #7a2020);
   color: #fff5f5;
 }
 
 .arcade-btn.yellow {
-  background: radial-gradient(circle at 35% 30%, #ffe28a, #f0c000 60%, #8a6800);
+  background: radial-gradient(circle at 35% 30%, #ffe9a0, var(--warn) 60%, #8a6a20);
 }
 
 .arcade-btn.cyan {
-  background: radial-gradient(circle at 35% 30%, #9af4ff, var(--cyan) 55%, #0a7a8a);
+  background: radial-gradient(circle at 35% 30%, #b8fff8, var(--accent) 55%, #1a6a66);
   color: #042028;
 }
 
 .arcade-btn.orange {
-  background: radial-gradient(circle at 35% 30%, #ffc08a, var(--orange) 55%, #8a3a00);
-  color: #1a0a00;
+  background: radial-gradient(circle at 35% 30%, #d0d8e4, #6a7588 55%, #2a3444);
+  color: #e8eef6;
 }
 
 .utility-row {
@@ -405,8 +422,8 @@ input {
 
 .deck-btn {
   appearance: none;
-  border: 1px solid #6a3840;
-  background: linear-gradient(180deg, #3a1c22, #221014);
+  border: 1px solid #2a3444;
+  background: linear-gradient(180deg, #2a3444, #161c26);
   color: var(--ink);
   border-radius: 8px;
   padding: 10px 12px;
@@ -414,37 +431,37 @@ input {
   letter-spacing: 0.06em;
   cursor: pointer;
   touch-action: manipulation;
-  box-shadow: 0 3px 0 #0a0405;
+  box-shadow: 0 3px 0 #05070a;
 }
 
 .deck-btn:active {
   transform: translateY(2px);
-  box-shadow: 0 1px 0 #0a0405;
+  box-shadow: 0 1px 0 #05070a;
 }
 
 .deck-btn.primary {
-  background: linear-gradient(180deg, #ffd36a, var(--amber) 55%, #b86800);
-  color: #2a1200;
-  border-color: #ffc040;
+  background: linear-gradient(180deg, #7ef0e8, var(--accent) 55%, #2a8a84);
+  color: #041416;
+  border-color: #4ecdc4;
 }
 
 .deck-btn.ghost {
   background: transparent;
-  border-color: #6a3840;
+  border-color: #2a3444;
   color: var(--muted);
 }
 
 .deck-btn.pulse {
-  animation: start-pulse 1.6s ease-in-out infinite;
+  animation: start-pulse 1.8s ease-in-out infinite;
 }
 
 @keyframes start-pulse {
   0%,
   100% {
-    box-shadow: 0 3px 0 #0a0405, 0 0 0 0 rgba(255, 176, 0, 0.4);
+    box-shadow: 0 3px 0 #05070a, 0 0 0 0 rgba(78, 205, 196, 0.35);
   }
   50% {
-    box-shadow: 0 3px 0 #0a0405, 0 0 18px 2px rgba(255, 176, 0, 0.35);
+    box-shadow: 0 3px 0 #05070a, 0 0 16px 2px rgba(78, 205, 196, 0.28);
   }
 }
 
@@ -454,8 +471,8 @@ input {
   justify-content: center;
   gap: 12px;
   padding: 12px 16px 16px;
-  background: linear-gradient(180deg, #16090b, #0a0405);
-  border-top: 1px solid #3a1c20;
+  background: linear-gradient(180deg, #0e131a, #070a0e);
+  border-top: 1px solid #1c2430;
 }
 
 .coin-slot {
@@ -483,9 +500,8 @@ input {
 .side-panel {
   position: relative;
   z-index: 1;
-  background:
-    linear-gradient(160deg, rgba(40, 18, 20, 0.92), rgba(12, 6, 8, 0.95));
-  border: 2px solid #5a2a30;
+  background: linear-gradient(160deg, rgba(28, 36, 48, 0.95), rgba(10, 14, 20, 0.96));
+  border: 2px solid #2a3444;
   border-radius: 14px;
   padding: 16px;
   box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
@@ -495,10 +511,9 @@ input {
 .panel-title {
   font-family: 'Press Start 2P', monospace;
   font-size: 0.7rem;
-  color: var(--amber);
+  color: var(--accent);
   letter-spacing: 0.08em;
   margin-bottom: 14px;
-  text-shadow: 0 0 10px rgba(255, 176, 0, 0.4);
 }
 
 .leaderboard {
@@ -516,13 +531,13 @@ input {
   align-items: baseline;
   font-size: 0.92rem;
   padding: 8px 0;
-  border-bottom: 1px solid rgba(255, 176, 0, 0.15);
+  border-bottom: 1px solid rgba(78, 205, 196, 0.12);
 }
 
 .leaderboard .rank {
   font-family: 'Press Start 2P', monospace;
   font-size: 0.5rem;
-  color: var(--cyan);
+  color: var(--muted);
 }
 
 .leaderboard .name {
@@ -535,7 +550,7 @@ input {
 .leaderboard .pts {
   font-family: 'Press Start 2P', monospace;
   font-size: 0.5rem;
-  color: var(--amber-hot);
+  color: var(--accent-hot);
 }
 
 .leaderboard .empty {
@@ -559,19 +574,18 @@ input {
 }
 
 .auth-modal::backdrop {
-  background: rgba(4, 2, 3, 0.78);
+  background: rgba(4, 6, 10, 0.78);
   backdrop-filter: blur(2px);
 }
 
 .auth-card {
   width: min(420px, 100%);
   margin: auto;
-  background:
-    linear-gradient(180deg, #3a171c, #16090b);
-  border: 3px solid var(--amber);
+  background: linear-gradient(180deg, #1c2430, #0e131a);
+  border: 2px solid var(--accent);
   border-radius: 14px;
   padding: 20px;
-  box-shadow: 0 0 40px rgba(255, 140, 0, 0.2);
+  box-shadow: 0 0 40px rgba(78, 205, 196, 0.12);
   display: grid;
   gap: 12px;
 }
@@ -580,7 +594,7 @@ input {
   font-family: 'Press Start 2P', monospace;
   font-size: 0.85rem;
   text-align: center;
-  color: var(--amber-hot);
+  color: var(--accent-hot);
   letter-spacing: 0.08em;
 }
 
@@ -601,8 +615,8 @@ input {
 
 .auth-card input {
   width: 100%;
-  border: 1px solid #6a3840;
-  background: #0a0506;
+  border: 1px solid #2a3444;
+  background: #070a0e;
   color: var(--ink);
   border-radius: 8px;
   padding: 12px;
@@ -641,13 +655,14 @@ input {
   }
 }
 
-@media (max-width: 560px) {
-  .arcade-room {
-    padding: 10px 8px 24px;
+/* Phones: gestures only — no arcade button pad */
+@media (pointer: coarse), (max-width: 720px) {
+  .button-bank {
+    display: none !important;
   }
 
-  .button-bank {
-    grid-template-columns: 1fr;
+  .swipe-hint {
+    display: block;
   }
 
   .bezel {
@@ -655,7 +670,28 @@ input {
     padding: 10px;
   }
 
+  .utility-row .deck-btn {
+    flex: 1 1 calc(33% - 8px);
+    text-align: center;
+    padding: 12px 8px;
+    font-size: 0.85rem;
+  }
+
+  .cabinet-base .coin-label {
+    font-size: 0.4rem;
+  }
+
   .marquee-title {
     font-size: 1.45rem;
+  }
+
+  .arcade-room {
+    padding: 10px 8px 24px;
+  }
+}
+
+@media (min-width: 721px) and (pointer: fine) {
+  .swipe-hint {
+    display: none !important;
   }
 }

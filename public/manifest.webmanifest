@@ -1,9 +1,9 @@
 {
-  "name": "Tetris",
+  "name": "Def Not Tetris",
   "short_name": "Tetris",
-  "description": "NES-style Tetris with synced high scores",
-  "theme_color": "#0a0c10",
-  "background_color": "#0a0c10",
+  "description": "Arcade Tetris with swipe controls and synced high scores",
+  "theme_color": "#07090d",
+  "background_color": "#07090d",
   "display": "standalone",
   "orientation": "portrait",
   "start_url": "/",

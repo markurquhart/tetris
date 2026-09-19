@@ -39,6 +39,8 @@ export class InputHandler {
   private start = false;
   private levelUp = false;
   private levelDown = false;
+  private pendingMoveLeft = 0;
+  private pendingMoveRight = 0;
 
   reset(): void {
     this.leftHeld = false;
@@ -51,6 +53,8 @@ export class InputHandler {
     this.rightInitialMove = false;
     this.downInitialMove = false;
     this.clearOneShots();
+    this.pendingMoveLeft = 0;
+    this.pendingMoveRight = 0;
   }
 
   private clearOneShots(): void {
@@ -161,6 +165,18 @@ export class InputHandler {
     this.anyKey = true;
   }
 
+  /** Queue a single left step (swipe). */
+  triggerMoveLeft(): void {
+    this.pendingMoveLeft += 1;
+    this.anyKey = true;
+  }
+
+  /** Queue a single right step (swipe). */
+  triggerMoveRight(): void {
+    this.pendingMoveRight += 1;
+    this.anyKey = true;
+  }
+
   setHeld(
     direction: 'left' | 'right' | 'down',
     held: boolean,
@@ -182,8 +198,8 @@ export class InputHandler {
 
   update(): InputActions {
     const actions: InputActions = {
-      moveLeft: false,
-      moveRight: false,
+      moveLeft: this.pendingMoveLeft > 0,
+      moveRight: this.pendingMoveRight > 0,
       softDrop: false,
       rotateCw: this.rotateCw,
       rotateCcw: this.rotateCcw,
@@ -198,6 +214,8 @@ export class InputHandler {
       levelDown: this.levelDown,
     };
 
+    if (this.pendingMoveLeft > 0) this.pendingMoveLeft -= 1;
+    if (this.pendingMoveRight > 0) this.pendingMoveRight -= 1;
     this.clearOneShots();
 
     if (this.leftHeld) {
