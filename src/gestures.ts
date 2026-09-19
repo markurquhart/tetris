@@ -1,7 +1,7 @@
 import type { InputHandler } from './input';
 
-/** Slightly snappier than the calm baseline — still well above the old twitchy values. */
-const MOVE_THRESHOLD = 24;
+/** Horizontal moves stay calm; flick-down stays easy to register. */
+const MOVE_THRESHOLD = 30;
 const TAP_SLOP = 12;
 const FLICK_DISTANCE = 52;
 const FLICK_VELOCITY = 0.4; // px/ms
