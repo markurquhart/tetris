@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no"
+    />
+    <meta name="theme-color" content="#120808" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="description" content="Arcade Tetris — login, synced scores, leaderboard." />
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Chakra+Petch:wght@500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <title>TETRIS ARCADE</title>
+  </head>
+  <body>
+    <div class="arcade-room">
+      <div class="floor-glow" aria-hidden="true"></div>
+
+      <aside class="side-panel leaderboard-panel" aria-label="High scores">
+        <div class="panel-title">HI-SCORES</div>
+        <ol id="leaderboard" class="leaderboard">
+          <li class="empty">Waiting for challengers…</li>
+        </ol>
+      </aside>
+
+      <div class="cabinet" id="app">
+        <div class="marquee">
+          <div class="marquee-bulb-row" aria-hidden="true">
+            <span></span><span></span><span></span><span></span><span></span>
+            <span></span><span></span><span></span><span></span><span></span>
+          </div>
+          <h1 class="marquee-title">TETRIS</h1>
+          <p class="marquee-sub">ARCADE · 1 PLAYER</p>
+          <div class="marquee-bulb-row reverse" aria-hidden="true">
+            <span></span><span></span><span></span><span></span><span></span>
+            <span></span><span></span><span></span><span></span><span></span>
+          </div>
+        </div>
+
+        <div class="bezel">
+          <div class="bezel-screw tl" aria-hidden="true"></div>
+          <div class="bezel-screw tr" aria-hidden="true"></div>
+          <div class="crt">
+            <canvas id="game" width="500" height="700" aria-label="Tetris playfield"></canvas>
+            <div class="crt-glass" aria-hidden="true"></div>
+            <div class="crt-scanlines" aria-hidden="true"></div>
+            <div class="crt-vignette" aria-hidden="true"></div>
+          </div>
+          <div class="bezel-screw bl" aria-hidden="true"></div>
+          <div class="bezel-screw br" aria-hidden="true"></div>
+        </div>
+
+        <div class="control-deck">
+          <div class="player-strip">
+            <div class="player-chip">
+              <span class="chip-label">PLAYER</span>
+              <strong id="player-label">GUEST</strong>
+            </div>
+            <div class="player-chip">
+              <span class="chip-label">BEST</span>
+              <strong id="best-label">0</strong>
+            </div>
+            <button type="button" class="deck-btn ghost" id="btn-auth-open">LOGIN</button>
+            <button type="button" class="deck-btn ghost" id="btn-signout" hidden>LOGOUT</button>
+          </div>
+
+          <p id="status-line" class="status-line">Booting cabinet…</p>
+
+          <div class="button-bank">
+            <div class="stick-cluster" aria-label="Movement">
+              <button type="button" class="arcade-btn dir" id="btn-left" aria-label="Left">◀</button>
+              <div class="stick-mid">
+                <button type="button" class="arcade-btn dir" id="btn-soft-drop" aria-label="Soft drop">▼</button>
+              </div>
+              <button type="button" class="arcade-btn dir" id="btn-right" aria-label="Right">▶</button>
+            </div>
+
+            <div class="action-cluster" aria-label="Actions">
+              <button type="button" class="arcade-btn action yellow" id="btn-rotate-ccw" aria-label="Rotate CCW">
+                <span>B</span><small>↺</small>
+              </button>
+              <button type="button" class="arcade-btn action red" id="btn-rotate-cw" aria-label="Rotate CW">
+                <span>A</span><small>↻</small>
+              </button>
+              <button type="button" class="arcade-btn action cyan" id="btn-hard-drop" aria-label="Hard drop">
+                <span>DROP</span>
+              </button>
+              <button type="button" class="arcade-btn action orange" id="btn-hold" aria-label="Hold">
+                <span>HOLD</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="utility-row">
+            <button type="button" class="deck-btn primary pulse" id="btn-play">START</button>
+            <button type="button" class="deck-btn" id="btn-level-down">LVL −</button>
+            <button type="button" class="deck-btn" id="btn-level-up">LVL +</button>
+            <button type="button" class="deck-btn" id="btn-pause">PAUSE</button>
+            <button type="button" class="deck-btn" id="btn-restart">RESET</button>
+            <button type="button" class="deck-btn" id="btn-mute">SOUND</button>
+          </div>
+        </div>
+
+        <div class="cabinet-base">
+          <div class="coin-slot" aria-hidden="true"></div>
+          <span class="coin-label">INSERT COIN · FREE PLAY</span>
+        </div>
+      </div>
+
+      <aside class="side-panel auth-summary" aria-label="Account">
+        <div class="panel-title">OPERATOR</div>
+        <p id="auth-blurb" class="auth-blurb">
+          Create an account to keep one high score on Mac and iPhone.
+        </p>
+        <button type="button" class="deck-btn primary" id="btn-auth-open-side">PLAYER LOGIN</button>
+      </aside>
+    </div>
+
+    <dialog id="auth-modal" class="auth-modal">
+      <form method="dialog" id="auth-form" class="auth-card">
+        <div class="auth-marquee">PLAYER LOGIN</div>
+        <p class="auth-hint">Email + password · scores sync to your account</p>
+
+        <label>
+          Display name
+          <input id="auth-name" name="displayName" maxlength="24" autocomplete="nickname" placeholder="ACE" />
+        </label>
+        <label>
+          Email
+          <input id="auth-email" name="email" type="email" required autocomplete="email" placeholder="you@email.com" />
+        </label>
+        <label>
+          Password
+          <input id="auth-password" name="password" type="password" required minlength="6" autocomplete="current-password" placeholder="••••••••" />
+        </label>
+
+        <p id="auth-error" class="auth-error" role="alert" hidden></p>
+
+        <div class="auth-actions">
+          <button type="submit" class="deck-btn primary" id="btn-signin" value="signin">SIGN IN</button>
+          <button type="submit" class="deck-btn" id="btn-signup" value="signup">CREATE</button>
+          <button type="button" class="deck-btn ghost" id="btn-auth-close">CLOSE</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

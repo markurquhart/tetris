@@ -1,128 +1,69 @@
-# Tetris
+# Tetris Arcade (Mac + iPhone)
 
-## What this is
+Web arcade cabinet port of the Python Tetris game. Email login, Postgres scores in Supabase, public leaderboard, installable as a PWA.
 
-A desktop Tetris clone written in **Python**, rendered with **Pygame**. It aims for NES-style feel (scoring, gravity, level progression) while adding modern conveniences: SRS rotation with wall kicks, hold, a ghost piece, a three-piece preview, and high scores saved locally in `highscore.txt`. Audio is generated in code (no external sound assets required).
+**Production domain:** [def-not-tetris.com](https://def-not-tetris.com)
 
-**Stack:** Python 3.8+, [Pygame](https://www.pygame.org/) (window, input, graphics, audio), NumPy (procedural sound synthesis in `sound_manager.py`).
-
-## Features
-
-- All 7 classic tetrominoes with authentic colors
-- SRS (Super Rotation System) with wall kicks
-- Ghost piece showing landing position
-- Hold piece functionality
-- Next piece preview (3 pieces)
-- NES-style scoring system
-- Level progression with increasing speed
-- High score persistence
-- DAS (Delayed Auto Shift) for smooth movement
-- Sound effects and background music
-- Pause, restart, and mute controls
-
-## Installation
-
-### Prerequisites
-- Python 3.8 or higher
-- pip (Python package manager)
-
-### Setup
-
-1. Clone or download this repository and open a terminal in the project root (the folder that contains `main.py`).
-
-2. Create and activate a virtual environment:
+## Setup
 
 ```bash
-python3 -m venv venv
+cd tetris-web
+npm install
+cp .env.example .env
 ```
+
+### 1. Supabase project
+
+1. Create a project at [supabase.com](https://supabase.com)
+2. **SQL Editor** → run [`supabase/schema.sql`](./supabase/schema.sql)
+3. **Authentication → Providers** → enable Email
+4. For personal use, under **Authentication → Settings**, you can disable **Confirm email** so signup signs you in immediately
+5. Copy Project URL + anon key into `.env`:
+
+```
+VITE_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
+VITE_SUPABASE_ANON_KEY=YOUR_ANON_KEY
+```
+
+6. In Supabase → **Authentication → URL Configuration**, add:
+   - Site URL: `https://def-not-tetris.com`
+   - Redirect URLs: `https://def-not-tetris.com/**` and `http://localhost:5173/**`
+
+### 2. Run locally
 
 ```bash
-# macOS / Linux
-source venv/bin/activate
+npm run dev
 ```
 
-```powershell
-# Windows (PowerShell)
-.\venv\Scripts\Activate.ps1
-```
+## Deploy to Vercel (def-not-tetris.com)
 
-```bat
-# Windows (Command Prompt)
-venv\Scripts\activate.bat
-```
+Future pushes to `main` auto-deploy. One-time setup:
 
-3. Install dependencies:
+1. Put this folder on GitHub (new repo, e.g. `def-not-tetris`).
+2. [vercel.com/new](https://vercel.com/new) → Import that repo.
+3. Framework: **Vite** (or leave auto). Root directory: repo root.
+4. Environment variables (Production + Preview):
+   - `VITE_SUPABASE_URL`
+   - `VITE_SUPABASE_ANON_KEY`
+5. Deploy.
+6. **Project → Settings → Domains** → add `def-not-tetris.com` and `www.def-not-tetris.com`.
+7. At your domain registrar, point DNS as Vercel shows (usually):
+   - `A` `@` → `76.76.21.21`
+   - or their nameservers / CNAME for `www`
+
+After that: `git push origin main` → live on the domain in about a minute.
+
+## Play
+
+- **Guest**: play locally anytime
+- **LOGIN / CREATE**: account scores sync across Mac & iPhone
+- **HI-SCORES**: top players from the database
+- iPhone: Safari → Share → Add to Home Screen
+
+## Scripts
 
 ```bash
-pip install -r requirements.txt
+npm run dev      # local
+npm run build    # production bundle → dist/
+npm run preview  # preview dist locally
 ```
-
-## How to run
-
-With the virtual environment activated and your shell in the project root:
-
-```bash
-python main.py
-```
-
-On some systems the interpreter is `python3` instead of `python`:
-
-```bash
-python3 main.py
-```
-
-The window title should be **Tetris**. Quit with **ESC** or by closing the window.
-
-## Controls
-
-| Key | Action |
-|-----|--------|
-| ← / → | Move piece left/right |
-| ↓ | Soft drop (accelerated fall) |
-| ↑ / X | Rotate clockwise |
-| Z | Rotate counter-clockwise |
-| Space | Hard drop (instant drop) |
-| C | Hold piece |
-| P | Pause/Unpause |
-| R | Restart game |
-| M | Mute/Unmute audio |
-| ESC | Quit game |
-
-## Scoring
-
-| Action | Points |
-|--------|--------|
-| Single (1 line) | 40 × (level + 1) |
-| Double (2 lines) | 100 × (level + 1) |
-| Triple (3 lines) | 300 × (level + 1) |
-| Tetris (4 lines) | 1200 × (level + 1) |
-| Soft drop | 1 point per cell |
-| Hard drop | 2 points per cell |
-
-## Level System
-
-- Start at Level 0 (selectable 0-9 on start screen)
-- Level increases every 10 lines cleared
-- Speed increases with each level
-- Maximum speed reached at Level 29
-
-## Project Structure
-
-```
-├── main.py           # Entry point
-├── constants.py      # Game constants and colors
-├── tetromino.py      # Tetromino definitions and rotation
-├── board.py          # Game board logic
-├── game.py           # Main game logic
-├── renderer.py       # All rendering code
-├── input_handler.py  # Input handling with DAS
-├── sound_manager.py  # Audio management
-├── high_score.py     # High score persistence
-├── requirements.txt  # Python dependencies
-├── .gitignore        # Git ignore rules (e.g. venv, highscore.txt)
-└── README.md         # This file
-```
-
-## License
-
-This project is for educational purposes.
