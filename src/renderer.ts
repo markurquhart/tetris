@@ -31,6 +31,8 @@ const UI = '"Chakra Petch", sans-serif';
 export class Renderer {
   private ctx: CanvasRenderingContext2D;
   private tick = 0;
+  private cellSprites = new Map<string, HTMLCanvasElement>();
+  private boardBg: HTMLCanvasElement | null = null;
 
   constructor(ctx: CanvasRenderingContext2D) {
     this.ctx = ctx;
@@ -38,20 +40,73 @@ export class Renderer {
 
   clear(): void {
     this.tick += 1;
-    const g = this.ctx.createLinearGradient(0, 0, 0, WINDOW_HEIGHT);
-    g.addColorStop(0, '#0a1018');
-    g.addColorStop(0.55, '#05070c');
-    g.addColorStop(1, '#030406');
-    this.ctx.fillStyle = g;
+    this.ctx.fillStyle = '#05070c';
     this.ctx.fillRect(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
 
-    // Subtle starfield / dust for attract feel
-    this.ctx.fillStyle = 'rgba(255,200,120,0.08)';
-    for (let i = 0; i < 18; i++) {
-      const x = (i * 73 + this.tick) % WINDOW_WIDTH;
-      const y = (i * 97) % WINDOW_HEIGHT;
-      this.ctx.fillRect(x, y, 2, 2);
+    // Cheap dust — skip most frames on busy boards
+    if (this.tick % 3 === 0) {
+      this.ctx.fillStyle = 'rgba(255,200,120,0.07)';
+      for (let i = 0; i < 10; i++) {
+        const x = (i * 73 + this.tick) % WINDOW_WIDTH;
+        const y = (i * 97) % WINDOW_HEIGHT;
+        this.ctx.fillRect(x, y, 2, 2);
+      }
     }
+  }
+
+  private cellKey(color: RGB): string {
+    return `${color[0]},${color[1]},${color[2]}`;
+  }
+
+  private getCellSprite(color: RGB): HTMLCanvasElement {
+    const key = this.cellKey(color);
+    let sprite = this.cellSprites.get(key);
+    if (sprite) return sprite;
+
+    sprite = document.createElement('canvas');
+    sprite.width = CELL_SIZE;
+    sprite.height = CELL_SIZE;
+    const c = sprite.getContext('2d')!;
+
+    const grad = c.createLinearGradient(0, 0, 0, CELL_SIZE);
+    grad.addColorStop(
+      0,
+      rgb([
+        Math.min(color[0] + 60, 255),
+        Math.min(color[1] + 60, 255),
+        Math.min(color[2] + 60, 255),
+      ]),
+    );
+    grad.addColorStop(1, rgb(color));
+    c.fillStyle = grad;
+    c.fillRect(1, 1, CELL_SIZE - 2, CELL_SIZE - 2);
+
+    c.strokeStyle = rgb([
+      Math.min(color[0] + 90, 255),
+      Math.min(color[1] + 90, 255),
+      Math.min(color[2] + 90, 255),
+    ]);
+    c.beginPath();
+    c.moveTo(1, 1);
+    c.lineTo(CELL_SIZE - 2, 1);
+    c.moveTo(1, 1);
+    c.lineTo(1, CELL_SIZE - 2);
+    c.stroke();
+
+    c.strokeStyle = rgb([
+      Math.max(color[0] - 70, 0),
+      Math.max(color[1] - 70, 0),
+      Math.max(color[2] - 70, 0),
+    ]);
+    c.beginPath();
+    c.moveTo(1, CELL_SIZE - 2);
+    c.lineTo(CELL_SIZE - 2, CELL_SIZE - 2);
+    c.moveTo(CELL_SIZE - 2, 1);
+    c.lineTo(CELL_SIZE - 2, CELL_SIZE - 2);
+    c.stroke();
+
+    this.cellSprites.set(key, sprite);
+    return sprite;
   }
 
   private drawCell(row: number, col: number, color: RGB, alpha = 255): void {
@@ -64,73 +119,50 @@ export class Renderer {
       return;
     }
 
-    const grad = this.ctx.createLinearGradient(x, y, x, y + CELL_SIZE);
-    grad.addColorStop(0, rgb([
-      Math.min(color[0] + 60, 255),
-      Math.min(color[1] + 60, 255),
-      Math.min(color[2] + 60, 255),
-    ]));
-    grad.addColorStop(1, rgb(color));
-    this.ctx.fillStyle = grad;
-    this.ctx.fillRect(x + 1, y + 1, CELL_SIZE - 2, CELL_SIZE - 2);
-
-    this.ctx.strokeStyle = rgb([
-      Math.min(color[0] + 90, 255),
-      Math.min(color[1] + 90, 255),
-      Math.min(color[2] + 90, 255),
-    ]);
-    this.ctx.beginPath();
-    this.ctx.moveTo(x + 1, y + 1);
-    this.ctx.lineTo(x + CELL_SIZE - 2, y + 1);
-    this.ctx.moveTo(x + 1, y + 1);
-    this.ctx.lineTo(x + 1, y + CELL_SIZE - 2);
-    this.ctx.stroke();
-
-    this.ctx.strokeStyle = rgb([
-      Math.max(color[0] - 70, 0),
-      Math.max(color[1] - 70, 0),
-      Math.max(color[2] - 70, 0),
-    ]);
-    this.ctx.beginPath();
-    this.ctx.moveTo(x + 1, y + CELL_SIZE - 2);
-    this.ctx.lineTo(x + CELL_SIZE - 2, y + CELL_SIZE - 2);
-    this.ctx.moveTo(x + CELL_SIZE - 2, y + 1);
-    this.ctx.lineTo(x + CELL_SIZE - 2, y + CELL_SIZE - 2);
-    this.ctx.stroke();
+    this.ctx.drawImage(this.getCellSprite(color), x, y);
   }
 
   drawBoardBackground(): void {
-    this.ctx.fillStyle = '#0b0f16';
-    this.ctx.fillRect(BOARD_X - 6, BOARD_Y - 6, BOARD_COLS * CELL_SIZE + 12, BOARD_ROWS * CELL_SIZE + 12);
+    if (!this.boardBg) {
+      this.boardBg = document.createElement('canvas');
+      this.boardBg.width = WINDOW_WIDTH;
+      this.boardBg.height = WINDOW_HEIGHT;
+      const c = this.boardBg.getContext('2d')!;
 
-    this.ctx.strokeStyle = '#4ecdc4';
-    this.ctx.lineWidth = 2;
-    this.ctx.strokeRect(
-      BOARD_X - 3,
-      BOARD_Y - 3,
-      BOARD_COLS * CELL_SIZE + 6,
-      BOARD_ROWS * CELL_SIZE + 6,
-    );
+      c.fillStyle = '#0b0f16';
+      c.fillRect(BOARD_X - 6, BOARD_Y - 6, BOARD_COLS * CELL_SIZE + 12, BOARD_ROWS * CELL_SIZE + 12);
 
-    this.ctx.fillStyle = rgb(DARK_GRAY);
-    this.ctx.fillRect(BOARD_X, BOARD_Y, BOARD_COLS * CELL_SIZE, BOARD_ROWS * CELL_SIZE);
+      c.strokeStyle = '#4ecdc4';
+      c.lineWidth = 2;
+      c.strokeRect(
+        BOARD_X - 3,
+        BOARD_Y - 3,
+        BOARD_COLS * CELL_SIZE + 6,
+        BOARD_ROWS * CELL_SIZE + 6,
+      );
 
-    this.ctx.strokeStyle = 'rgba(80, 90, 110, 0.45)';
-    this.ctx.lineWidth = 1;
-    for (let col = 0; col <= BOARD_COLS; col++) {
-      const x = BOARD_X + col * CELL_SIZE;
-      this.ctx.beginPath();
-      this.ctx.moveTo(x, BOARD_Y);
-      this.ctx.lineTo(x, BOARD_Y + BOARD_ROWS * CELL_SIZE);
-      this.ctx.stroke();
+      c.fillStyle = rgb(DARK_GRAY);
+      c.fillRect(BOARD_X, BOARD_Y, BOARD_COLS * CELL_SIZE, BOARD_ROWS * CELL_SIZE);
+
+      c.strokeStyle = 'rgba(80, 90, 110, 0.45)';
+      c.lineWidth = 1;
+      for (let col = 0; col <= BOARD_COLS; col++) {
+        const x = BOARD_X + col * CELL_SIZE;
+        c.beginPath();
+        c.moveTo(x, BOARD_Y);
+        c.lineTo(x, BOARD_Y + BOARD_ROWS * CELL_SIZE);
+        c.stroke();
+      }
+      for (let row = 0; row <= BOARD_ROWS; row++) {
+        const y = BOARD_Y + row * CELL_SIZE;
+        c.beginPath();
+        c.moveTo(BOARD_X, y);
+        c.lineTo(BOARD_X + BOARD_COLS * CELL_SIZE, y);
+        c.stroke();
+      }
     }
-    for (let row = 0; row <= BOARD_ROWS; row++) {
-      const y = BOARD_Y + row * CELL_SIZE;
-      this.ctx.beginPath();
-      this.ctx.moveTo(BOARD_X, y);
-      this.ctx.lineTo(BOARD_X + BOARD_COLS * CELL_SIZE, y);
-      this.ctx.stroke();
-    }
+
+    this.ctx.drawImage(this.boardBg, 0, 0);
   }
 
   drawBoard(board: Board, lineClearProgress = 0): void {

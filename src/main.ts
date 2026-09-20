@@ -29,6 +29,7 @@ const crt = document.querySelector<HTMLElement>('.crt')!;
 
 let lastGameOverHandled = false;
 let lineClearProgress: number | null = null;
+let paintQueued = false;
 
 function paint(): void {
   if (game.state === STATE_START) {
@@ -59,6 +60,16 @@ function paint(): void {
   renderer.drawSoundIndicator(sound.isEnabled());
 }
 
+/** Coalesce touch-driven paints to one per animation frame. */
+function schedulePaint(): void {
+  if (paintQueued) return;
+  paintQueued = true;
+  requestAnimationFrame(() => {
+    paintQueued = false;
+    paint();
+  });
+}
+
 bindPlayfieldGestures(
   crt,
   input,
@@ -66,7 +77,7 @@ bindPlayfieldGestures(
     unlock: () => {
       void sound.unlock();
     },
-    paint,
+    paint: schedulePaint,
     move: (dir) => {
       game.touchMove(dir);
     },
