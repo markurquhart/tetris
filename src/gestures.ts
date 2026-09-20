@@ -1,12 +1,16 @@
 import type { InputHandler } from './input';
 
-/** First L/R step comes sooner; extra steps stay spaced so it doesn't get twitchy. */
-const FIRST_MOVE_PX = 16;
-const STEP_MOVE_PX = 30;
+/**
+ * Incremental L/R: one cell per event, distance measured from the last step.
+ * Caps catch-up when the browser coalesces touch moves on a busy board.
+ */
+const FIRST_MOVE_PX = 18;
+const STEP_MOVE_PX = 28;
 const TAP_SLOP = 12;
 const FLICK_DISTANCE = 52;
 const FLICK_VELOCITY = 0.4; // px/ms
 const HOLD_MS = 420;
+const AXIS_LOCK_PX = 14;
 
 export interface GestureHooks {
   unlock: () => void;
@@ -22,13 +26,10 @@ export interface GestureHooks {
  * Touch / pointer gestures on the playfield:
  * - tap → rotate CW (or start game on the title screen)
  * - long-press → hold
- * - swipe L/R → move (steps as you drag)
+ * - swipe L/R → move (one step at a time)
  * - drag down → soft drop
  * - flick down → hard drop
  * - swipe up → hold
- *
- * One-shot actions apply immediately + repaint; soft-drop still uses held input
- * so continuous drag doesn't get twitchy.
  */
 export function bindPlayfieldGestures(
   surface: HTMLElement,
@@ -45,7 +46,12 @@ export function bindPlayfieldGestures(
   let sampleX = 0;
   let sampleY = 0;
   let sampleTime = 0;
-  let movedCellsX = 0;
+  /** Finger X where the last L/R step was charged from. */
+  let stepOriginX = 0;
+  /** 0 until first L/R step this gesture; then -1 or 1. */
+  let moveDir: -1 | 0 | 1 = 0;
+  /** Lock gesture to horizontal or vertical after a clear intent. */
+  let axisLock: 'none' | 'h' | 'v' = 'none';
   let softDropping = false;
   let holdTimer: number | null = null;
   let longPressed = false;
@@ -96,10 +102,11 @@ export function bindPlayfieldGestures(
 
       pointerId = e.pointerId;
       surface.setPointerCapture(e.pointerId);
-      startX = lastX = sampleX = e.clientX;
+      startX = lastX = sampleX = stepOriginX = e.clientX;
       startY = lastY = sampleY = e.clientY;
       startTime = sampleTime = performance.now();
-      movedCellsX = 0;
+      moveDir = 0;
+      axisLock = 'none';
       longPressed = false;
       consumed = false;
       endSoftDrop();
@@ -128,7 +135,6 @@ export function bindPlayfieldGestures(
       e.preventDefault();
 
       const now = performance.now();
-      // Keep a ~40ms trailing sample so flick velocity isn't washed out by a long drag
       if (now - sampleTime >= 40) {
         sampleX = lastX;
         sampleY = lastY;
@@ -148,30 +154,45 @@ export function bindPlayfieldGestures(
 
       if (isTitleScreen()) return;
 
-      // Horizontal: quick first cell, calmer spacing after that
-      if (absX > absY && absX >= FIRST_MOVE_PX) {
-        const cells = 1 + Math.floor((absX - FIRST_MOVE_PX) / STEP_MOVE_PX);
-        let stepped = false;
-        while (movedCellsX < cells) {
-          if (dx < 0) hooks.move(-1);
-          else hooks.move(1);
-          movedCellsX += 1;
-          consumed = true;
-          stepped = true;
-        }
-        if (stepped) bump();
+      // Commit to one axis so diagonal jitter can't flip modes mid-swipe
+      if (axisLock === 'none' && (absX >= AXIS_LOCK_PX || absY >= AXIS_LOCK_PX)) {
+        axisLock = absX > absY * 1.15 ? 'h' : absY > absX * 1.15 ? 'v' : 'none';
       }
 
-      // Soft drop while dragging down (held path — not per-pixel)
-      if (dy > STEP_MOVE_PX && absY >= absX) {
-        if (!softDropping) {
-          softDropping = true;
-          input.setHeld('down', true);
-          consumed = true;
-          hooks.unlock();
+      if (axisLock === 'h' || (axisLock === 'none' && absX > absY)) {
+        const fromOrigin = e.clientX - stepOriginX;
+        const dir: -1 | 1 = fromOrigin < 0 ? -1 : 1;
+        const needed = moveDir === 0 || dir !== moveDir ? FIRST_MOVE_PX : STEP_MOVE_PX;
+
+        // Direction reverse: re-arm from here, don't dump multiple cells
+        if (moveDir !== 0 && dir !== moveDir) {
+          moveDir = 0;
+          stepOriginX = e.clientX;
+          return;
         }
-      } else if (softDropping && dy < STEP_MOVE_PX * 0.5) {
-        endSoftDrop();
+
+        if (Math.abs(fromOrigin) >= needed) {
+          // One cell max per event — avoids multi-step jumps when frames coalesce
+          hooks.move(dir);
+          stepOriginX += dir * needed;
+          moveDir = dir;
+          consumed = true;
+          bump();
+        }
+        return;
+      }
+
+      if (axisLock === 'v' || (axisLock === 'none' && absY >= absX)) {
+        if (dy > STEP_MOVE_PX) {
+          if (!softDropping) {
+            softDropping = true;
+            input.setHeld('down', true);
+            consumed = true;
+            hooks.unlock();
+          }
+        } else if (softDropping && dy < STEP_MOVE_PX * 0.5) {
+          endSoftDrop();
+        }
       }
     },
     { passive: false },
@@ -196,7 +217,6 @@ export function bindPlayfieldGestures(
     clearHoldTimer();
     endSoftDrop();
 
-    // Flick wins even if soft-drop already marked the gesture as consumed
     if (!longPressed && isFlickDown(dx, dy, avgVelocity, recentVelocity)) {
       hooks.hardDrop();
       bump();
