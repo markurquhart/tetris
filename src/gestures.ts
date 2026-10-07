@@ -1,41 +1,73 @@
+import {
+  BOARD_COLS,
+  CELL_SIZE,
+  WINDOW_WIDTH,
+} from './constants';
 import type { InputHandler } from './input';
 
 /**
- * Incremental L/R from last step. Step distance scales mildly with finger
- * velocity so slow drags crawl and quick swipes keep up — without the prior
- * oversensitive multi-step / tiny fast-step thresholds.
+ * Horizontal moves track finger offset in *displayed* cell widths
+ * (canvas CSS scale → cell px). Absolute target cells from touch origin
+ * so the piece can't drift/"overshoot" relative to the finger mid-game.
  */
-const FIRST_MOVE_PX = 24;
-const SLOW_STEP_PX = 48;
-const BASE_STEP_PX = 34;
-const FAST_STEP_PX = 24;
-/** Horizontal velocity (px/ms) treated as a light/slow drag. */
-const VEL_SLOW = 0.12;
-/** Horizontal velocity (px/ms) treated as a quick swipe. */
-const VEL_FAST = 0.7;
-const TAP_SLOP = 12;
-const FLICK_DISTANCE = 52;
+const FIRST_CELL_FRAC = 0.48;
+const STEP_CELL_FRAC = 1;
+/** Safety cap if a huge coalesced jump arrives after a long hitch. */
+const MAX_CATCHUP_CELLS = 5;
+const TAP_SLOP_CELLS = 0.35;
+const FLICK_DISTANCE_CELLS = 1.6;
 const FLICK_VELOCITY = 0.4; // px/ms
 const HOLD_MS = 420;
-const AXIS_LOCK_PX = 14;
-/** Second cell only when a fast coalesced move clearly covers 2× the step. */
-const FAST_CATCHUP_STEPS = 2;
+const AXIS_LOCK_CELLS = 0.4;
+const SOFT_DROP_CELLS = 0.85;
 
 export interface GestureHooks {
   unlock: () => void;
   paint: () => void;
-  move: (dir: -1 | 1) => void;
+  /** Apply one cell; return false if blocked (wall/stack). */
+  move: (dir: -1 | 1) => boolean;
   rotate: () => void;
   hardDrop: () => void;
   hold: () => void;
   start: () => void;
 }
 
+interface Scale {
+  cell: number;
+  tapSlop: number;
+  axisLock: number;
+  softDrop: number;
+  flickDist: number;
+}
+
+function readScale(surface: HTMLElement): Scale {
+  const rect = surface.getBoundingClientRect();
+  // CRT/canvas is letterboxed to WINDOW aspect; width drives cell CSS size.
+  const scaleX = rect.width > 0 ? rect.width / WINDOW_WIDTH : 1;
+  const cell = Math.max(12, CELL_SIZE * scaleX);
+  return {
+    cell,
+    tapSlop: cell * TAP_SLOP_CELLS,
+    axisLock: cell * AXIS_LOCK_CELLS,
+    softDrop: cell * SOFT_DROP_CELLS,
+    flickDist: cell * FLICK_DISTANCE_CELLS,
+  };
+}
+
+function targetCellsFromDx(dx: number, cell: number): number {
+  const abs = Math.abs(dx);
+  const firstPx = cell * FIRST_CELL_FRAC;
+  if (abs < firstPx) return 0;
+  const sign = dx < 0 ? -1 : 1;
+  const stepPx = cell * STEP_CELL_FRAC;
+  return sign * (1 + Math.floor((abs - firstPx) / stepPx));
+}
+
 /**
  * Touch / pointer gestures on the playfield:
  * - tap → rotate CW (or start game on the title screen)
  * - long-press → hold
- * - swipe L/R → move (velocity-scaled step distance)
+ * - drag L/R → piece tracks finger by cell widths (1:1 with on-screen cells)
  * - drag down → soft drop
  * - flick down → hard drop
  * - swipe up → hold
@@ -51,23 +83,20 @@ export function bindPlayfieldGestures(
   let startY = 0;
   let lastX = 0;
   let lastY = 0;
-  let lastMoveTime = 0;
   let startTime = 0;
   let sampleX = 0;
   let sampleY = 0;
   let sampleTime = 0;
-  /** Smoothed |vx| so a single coalesced jump doesn't jump to "fast" mode. */
-  let smoothVelX = 0;
-  /** Finger X where the last L/R step was charged from. */
-  let stepOriginX = 0;
-  /** 0 until first L/R step this gesture; then -1 or 1. */
-  let moveDir: -1 | 0 | 1 = 0;
-  /** Lock gesture to horizontal or vertical after a clear intent. */
+  /** Touch origin X for absolute L/R quantization (re-anchored on wall hits). */
+  let anchorX = 0;
+  /** Net successful L/R cells applied this gesture. */
+  let signedCells = 0;
   let axisLock: 'none' | 'h' | 'v' = 'none';
   let softDropping = false;
   let holdTimer: number | null = null;
   let longPressed = false;
   let consumed = false;
+  let scale = readScale(surface);
 
   const clearHoldTimer = () => {
     if (holdTimer !== null) {
@@ -87,16 +116,34 @@ export function bindPlayfieldGestures(
     hooks.paint();
   };
 
-  const stepDistanceForVelocity = (velocityPxPerMs: number, isFirst: boolean): number => {
-    if (isFirst) return FIRST_MOVE_PX;
-    const t = Math.max(0, Math.min(1, (velocityPxPerMs - VEL_SLOW) / (VEL_FAST - VEL_SLOW)));
-    // Slow → large gap; fast → closer to FIRST, not twitchy micro-steps.
-    if (t <= 0.5) {
-      const u = t / 0.5;
-      return SLOW_STEP_PX + (BASE_STEP_PX - SLOW_STEP_PX) * u;
+  const syncHorizontal = (clientX: number): boolean => {
+    let target = targetCellsFromDx(clientX - anchorX, scale.cell);
+    // Never ask for more than board width of catch-up in one gesture.
+    target = Math.max(-BOARD_COLS, Math.min(BOARD_COLS, target));
+
+    let stepped = false;
+    let guard = 0;
+    while (signedCells < target && guard < MAX_CATCHUP_CELLS) {
+      if (!hooks.move(1)) {
+        // Wall: re-anchor so further motion in this direction doesn't queue delay.
+        anchorX = clientX - signedCells * scale.cell;
+        break;
+      }
+      signedCells += 1;
+      stepped = true;
+      guard += 1;
     }
-    const u = (t - 0.5) / 0.5;
-    return BASE_STEP_PX + (FAST_STEP_PX - BASE_STEP_PX) * u;
+    while (signedCells > target && guard < MAX_CATCHUP_CELLS) {
+      if (!hooks.move(-1)) {
+        anchorX = clientX - signedCells * scale.cell;
+        break;
+      }
+      signedCells -= 1;
+      stepped = true;
+      guard += 1;
+    }
+    if (stepped) consumed = true;
+    return stepped;
   };
 
   const isFlickDown = (
@@ -108,11 +155,11 @@ export function bindPlayfieldGestures(
     const absX = Math.abs(dx);
     const absY = Math.abs(dy);
     if (isTitleScreen()) return false;
-    if (dy < FLICK_DISTANCE || absY < absX * 0.85) return false;
+    if (dy < scale.flickDist || absY < absX * 0.85) return false;
     return (
       avgVelocity >= FLICK_VELOCITY ||
       recentVelocity >= FLICK_VELOCITY ||
-      dy >= FLICK_DISTANCE * 1.25
+      dy >= scale.flickDist * 1.25
     );
   };
 
@@ -123,13 +170,13 @@ export function bindPlayfieldGestures(
       if (pointerId !== null) return;
       e.preventDefault();
 
+      scale = readScale(surface);
       pointerId = e.pointerId;
       surface.setPointerCapture(e.pointerId);
-      startX = lastX = sampleX = stepOriginX = e.clientX;
+      startX = lastX = sampleX = anchorX = e.clientX;
       startY = lastY = sampleY = e.clientY;
-      startTime = sampleTime = lastMoveTime = performance.now();
-      smoothVelX = 0;
-      moveDir = 0;
+      startTime = sampleTime = performance.now();
+      signedCells = 0;
       axisLock = 'none';
       longPressed = false;
       consumed = false;
@@ -141,7 +188,7 @@ export function bindPlayfieldGestures(
         if (pointerId === null || consumed || isTitleScreen()) return;
         const dx = lastX - startX;
         const dy = lastY - startY;
-        if (Math.hypot(dx, dy) < TAP_SLOP) {
+        if (Math.hypot(dx, dy) < scale.tapSlop) {
           longPressed = true;
           consumed = true;
           hooks.hold();
@@ -165,76 +212,38 @@ export function bindPlayfieldGestures(
         sampleTime = now;
       }
 
-      const dt = Math.max(1, now - lastMoveTime);
-      const instantVelX = Math.abs(e.clientX - lastX) / dt;
-      // EMA — dampens one-frame coalesced spikes that made swipes too hot.
-      smoothVelX = smoothVelX * 0.65 + instantVelX * 0.35;
       lastX = e.clientX;
       lastY = e.clientY;
-      lastMoveTime = now;
 
       const dx = e.clientX - startX;
       const dy = e.clientY - startY;
       const absX = Math.abs(dx);
       const absY = Math.abs(dy);
 
-      if (absX > TAP_SLOP || absY > TAP_SLOP) {
+      if (absX > scale.tapSlop || absY > scale.tapSlop) {
         clearHoldTimer();
       }
 
       if (isTitleScreen()) return;
 
-      // Commit to one axis so diagonal jitter can't flip modes mid-swipe
-      if (axisLock === 'none' && (absX >= AXIS_LOCK_PX || absY >= AXIS_LOCK_PX)) {
+      if (axisLock === 'none' && (absX >= scale.axisLock || absY >= scale.axisLock)) {
         axisLock = absX > absY * 1.15 ? 'h' : absY > absX * 1.15 ? 'v' : 'none';
       }
 
       if (axisLock === 'h' || (axisLock === 'none' && absX > absY)) {
-        const fromOrigin = e.clientX - stepOriginX;
-        const dir: -1 | 1 = fromOrigin < 0 ? -1 : 1;
-
-        // Direction reverse: re-arm from here, don't dump multiple cells
-        if (moveDir !== 0 && dir !== moveDir) {
-          moveDir = 0;
-          stepOriginX = e.clientX;
-          return;
-        }
-
-        const needed = stepDistanceForVelocity(smoothVelX, moveDir === 0);
-        const travel = Math.abs(e.clientX - stepOriginX);
-        if (travel < needed) return;
-
-        // Default: one cell. Fast coalesced moves may take a second if earned.
-        const maxSteps =
-          moveDir !== 0 && smoothVelX >= VEL_FAST && travel >= needed * 2
-            ? FAST_CATCHUP_STEPS
-            : 1;
-
-        let stepped = false;
-        let steps = 0;
-        while (steps < maxSteps) {
-          const stepPx = stepDistanceForVelocity(smoothVelX, moveDir === 0);
-          if (Math.abs(e.clientX - stepOriginX) < stepPx) break;
-          hooks.move(dir);
-          stepOriginX += dir * stepPx;
-          moveDir = dir;
-          consumed = true;
-          stepped = true;
-          steps += 1;
-        }
-        if (stepped) bump();
+        if (syncHorizontal(e.clientX)) bump();
         return;
       }
 
       if (axisLock === 'v' || (axisLock === 'none' && absY >= absX)) {
-        if (dy > BASE_STEP_PX) {
+        if (dy > scale.softDrop) {
           if (!softDropping) {
             softDropping = true;
             input.setHeld('down', true);
             consumed = true;
             hooks.unlock();
           }
-        } else if (softDropping && dy < BASE_STEP_PX * 0.5) {
+        } else if (softDropping && dy < scale.softDrop * 0.5) {
           endSoftDrop();
         }
       }
@@ -261,15 +270,20 @@ export function bindPlayfieldGestures(
     clearHoldTimer();
     endSoftDrop();
 
+    // Final L/R sync so a last coalesced sample can't leave the piece short/long.
+    if (!longPressed && !isTitleScreen() && (axisLock === 'h' || (axisLock === 'none' && absX > absY && absX >= scale.tapSlop))) {
+      if (syncHorizontal(e.clientX)) bump();
+    }
+
     if (!longPressed && isFlickDown(dx, dy, avgVelocity, recentVelocity)) {
       hooks.hardDrop();
       bump();
     } else if (!longPressed && !consumed) {
-      if (dist < TAP_SLOP) {
+      if (dist < scale.tapSlop) {
         if (isTitleScreen()) hooks.start();
         else hooks.rotate();
         bump();
-      } else if (!isTitleScreen() && dy < -BASE_STEP_PX && absY > absX) {
+      } else if (!isTitleScreen() && dy < -scale.softDrop && absY > absX) {
         hooks.hold();
         bump();
       }
@@ -300,6 +314,14 @@ export function bindPlayfieldGestures(
     },
     { passive: false },
   );
+
+  // Keep cell scale fresh if the CRT resizes (rotation / browser chrome).
+  if (typeof ResizeObserver !== 'undefined') {
+    const ro = new ResizeObserver(() => {
+      scale = readScale(surface);
+    });
+    ro.observe(surface);
+  }
 }
 
 /** Page-level: stop iOS double-tap zoom outside captured pointers. */
