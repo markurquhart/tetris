@@ -1,16 +1,25 @@
 import type { InputHandler } from './input';
 
 /**
- * Incremental L/R: one cell per event, distance measured from the last step.
- * Caps catch-up when the browser coalesces touch moves on a busy board.
+ * Incremental L/R: distance measured from the last step, with step size
+ * scaled by finger velocity so light drags crawl and fast swipes keep up.
+ * Limited multi-step catch-up when the browser coalesces pointermoves.
  */
 const FIRST_MOVE_PX = 18;
-const STEP_MOVE_PX = 28;
+const SLOW_STEP_PX = 42;
+const BASE_STEP_PX = 28;
+const FAST_STEP_PX = 14;
+/** Horizontal velocity (px/ms) treated as a light/slow drag. */
+const VEL_SLOW = 0.08;
+/** Horizontal velocity (px/ms) treated as a quick swipe. */
+const VEL_FAST = 0.55;
 const TAP_SLOP = 12;
 const FLICK_DISTANCE = 52;
 const FLICK_VELOCITY = 0.4; // px/ms
 const HOLD_MS = 420;
 const AXIS_LOCK_PX = 14;
+/** Cap cells applied per pointermove so a lag spike can't teleport the piece. */
+const MAX_STEPS_PER_EVENT = 3;
 
 export interface GestureHooks {
   unlock: () => void;
@@ -26,7 +35,7 @@ export interface GestureHooks {
  * Touch / pointer gestures on the playfield:
  * - tap → rotate CW (or start game on the title screen)
  * - long-press → hold
- * - swipe L/R → move (one step at a time)
+ * - swipe L/R → move (velocity-scaled step distance)
  * - drag down → soft drop
  * - flick down → hard drop
  * - swipe up → hold
@@ -42,6 +51,7 @@ export function bindPlayfieldGestures(
   let startY = 0;
   let lastX = 0;
   let lastY = 0;
+  let lastMoveTime = 0;
   let startTime = 0;
   let sampleX = 0;
   let sampleY = 0;
@@ -76,6 +86,18 @@ export function bindPlayfieldGestures(
     hooks.paint();
   };
 
+  const stepDistanceForVelocity = (velocityPxPerMs: number, isFirst: boolean): number => {
+    if (isFirst) return FIRST_MOVE_PX;
+    const t = Math.max(0, Math.min(1, (velocityPxPerMs - VEL_SLOW) / (VEL_FAST - VEL_SLOW)));
+    // Slow → large gap (few cells); fast → small gap (keeps up with swipe).
+    if (t <= 0.5) {
+      const u = t / 0.5;
+      return SLOW_STEP_PX + (BASE_STEP_PX - SLOW_STEP_PX) * u;
+    }
+    const u = (t - 0.5) / 0.5;
+    return BASE_STEP_PX + (FAST_STEP_PX - BASE_STEP_PX) * u;
+  };
+
   const isFlickDown = (
     dx: number,
     dy: number,
@@ -104,7 +126,7 @@ export function bindPlayfieldGestures(
       surface.setPointerCapture(e.pointerId);
       startX = lastX = sampleX = stepOriginX = e.clientX;
       startY = lastY = sampleY = e.clientY;
-      startTime = sampleTime = performance.now();
+      startTime = sampleTime = lastMoveTime = performance.now();
       moveDir = 0;
       axisLock = 'none';
       longPressed = false;
@@ -141,8 +163,12 @@ export function bindPlayfieldGestures(
         sampleTime = now;
       }
 
+      const dt = Math.max(1, now - lastMoveTime);
+      const instantVelX = Math.abs(e.clientX - lastX) / dt;
       lastX = e.clientX;
       lastY = e.clientY;
+      lastMoveTime = now;
+
       const dx = e.clientX - startX;
       const dy = e.clientY - startY;
       const absX = Math.abs(dx);
@@ -162,7 +188,6 @@ export function bindPlayfieldGestures(
       if (axisLock === 'h' || (axisLock === 'none' && absX > absY)) {
         const fromOrigin = e.clientX - stepOriginX;
         const dir: -1 | 1 = fromOrigin < 0 ? -1 : 1;
-        const needed = moveDir === 0 || dir !== moveDir ? FIRST_MOVE_PX : STEP_MOVE_PX;
 
         // Direction reverse: re-arm from here, don't dump multiple cells
         if (moveDir !== 0 && dir !== moveDir) {
@@ -171,26 +196,31 @@ export function bindPlayfieldGestures(
           return;
         }
 
-        if (Math.abs(fromOrigin) >= needed) {
-          // One cell max per event — avoids multi-step jumps when frames coalesce
+        let stepped = false;
+        let steps = 0;
+        while (steps < MAX_STEPS_PER_EVENT) {
+          const needed = stepDistanceForVelocity(instantVelX, moveDir === 0);
+          if (Math.abs(e.clientX - stepOriginX) < needed) break;
           hooks.move(dir);
           stepOriginX += dir * needed;
           moveDir = dir;
           consumed = true;
-          bump();
+          stepped = true;
+          steps += 1;
         }
+        if (stepped) bump();
         return;
       }
 
       if (axisLock === 'v' || (axisLock === 'none' && absY >= absX)) {
-        if (dy > STEP_MOVE_PX) {
+        if (dy > BASE_STEP_PX) {
           if (!softDropping) {
             softDropping = true;
             input.setHeld('down', true);
             consumed = true;
             hooks.unlock();
           }
-        } else if (softDropping && dy < STEP_MOVE_PX * 0.5) {
+        } else if (softDropping && dy < BASE_STEP_PX * 0.5) {
           endSoftDrop();
         }
       }
@@ -225,7 +255,7 @@ export function bindPlayfieldGestures(
         if (isTitleScreen()) hooks.start();
         else hooks.rotate();
         bump();
-      } else if (!isTitleScreen() && dy < -STEP_MOVE_PX && absY > absX) {
+      } else if (!isTitleScreen() && dy < -BASE_STEP_PX && absY > absX) {
         hooks.hold();
         bump();
       }

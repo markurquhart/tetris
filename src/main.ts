@@ -1,7 +1,15 @@
 import './style.css';
 import './ui-themes.css';
 import { AuthService } from './auth';
-import { FPS, STATE_GAME_OVER, STATE_PAUSED, STATE_START, WINDOW_HEIGHT, WINDOW_WIDTH } from './constants';
+import {
+  FPS,
+  MAX_CATCH_UP_FRAMES,
+  STATE_GAME_OVER,
+  STATE_PAUSED,
+  STATE_START,
+  WINDOW_HEIGHT,
+  WINDOW_WIDTH,
+} from './constants';
 import { Game } from './game';
 import { bindPlayfieldGestures, preventMobilePageZoom } from './gestures';
 import { InputHandler } from './input';
@@ -264,15 +272,24 @@ let frameAccumulator = 0;
 let lastTime = performance.now();
 
 function frame(now: number): void {
-  const dt = now - lastTime;
+  // Cap dt so a background tab / long GC pause doesn't dump a huge catch-up debt.
+  const dt = Math.min(now - lastTime, (1000 / FPS) * MAX_CATCH_UP_FRAMES);
   lastTime = now;
   frameAccumulator += dt;
   const frameMs = 1000 / FPS;
 
+  // Drop excess debt instead of spiraling: mid-game paint cost used to stack
+  // multiple paints per RAF, which delayed pointer events and mushied DAS.
+  if (frameAccumulator > frameMs * MAX_CATCH_UP_FRAMES) {
+    frameAccumulator = frameMs * MAX_CATCH_UP_FRAMES;
+  }
+
+  let simulated = false;
   while (frameAccumulator >= frameMs) {
     frameAccumulator -= frameMs;
+    simulated = true;
 
-    const actions = input.update();
+    const actions = input.update(now);
     if (actions.mute) sound.toggleMute();
 
     const wasGameOver = game.state === STATE_GAME_OVER;
@@ -290,6 +307,11 @@ function frame(now: number): void {
     if (game.state === STATE_START) {
       lastGameOverHandled = false;
     }
+  }
+
+  // One paint per animation frame — keeps the main thread free for input.
+  if (simulated || paintQueued) {
+    paintQueued = false;
     paint();
   }
 
