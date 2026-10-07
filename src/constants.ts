@@ -176,11 +176,27 @@ export const SCORE_SINGLE = 40;
 export const SCORE_DOUBLE = 100;
 export const SCORE_TRIPLE = 300;
 export const SCORE_TETRIS = 1200;
+/** Bonus when a clear empties the whole board (perfect / all-clear). */
+export const SCORE_PERFECT_CLEAR = 2000;
 export const SCORE_SOFT_DROP = 1;
 export const SCORE_HARD_DROP = 2;
 
 export const LINES_PER_LEVEL = 10;
 export const LINE_CLEAR_ANIMATION_FRAMES = 20;
+/** On-screen Tetris banner duration (~0.9s at 60fps). */
+export const CELEBRATION_TETRIS_FRAMES = 55;
+/** All-clear / perfect-clear banner duration (~1.3s at 60fps). */
+export const CELEBRATION_PERFECT_FRAMES = 78;
+/** Tetris that also empties the board. */
+export const CELEBRATION_TETRIS_PERFECT_FRAMES = 96;
+
+export type CelebrationKind = 'tetris' | 'perfect' | 'tetris_perfect';
+
+export interface Celebration {
+  kind: CelebrationKind;
+  framesLeft: number;
+  totalFrames: number;
+}
 
 export const STATE_START = 'start';
 export const STATE_PLAYING = 'playing';

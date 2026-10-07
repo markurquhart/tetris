@@ -21,6 +21,12 @@ import { applyUiTheme } from './ui';
 preventMobilePageZoom();
 applyUiTheme();
 
+declare global {
+  interface Window {
+    __dntPreviewCelebration?: (kind: 'tetris' | 'perfect' | 'tetris_perfect') => void;
+  }
+}
+
 const canvas = document.querySelector<HTMLCanvasElement>('#game')!;
 const ctx = canvas.getContext('2d')!;
 canvas.width = WINDOW_WIDTH;
@@ -34,10 +40,61 @@ const scores = new ScoreService(auth);
 const game = new Game(sound);
 
 const crt = document.querySelector<HTMLElement>('.crt')!;
+const playAlert = document.querySelector<HTMLElement>('#play-alert')!;
 
 let lastGameOverHandled = false;
 let lineClearProgress: number | null = null;
 let paintQueued = false;
+let lastCelebrationKind: string | null = null;
+let hudStatusFallback = '';
+
+function celebrationCopy(kind: NonNullable<typeof game.celebration>['kind']): {
+  status: string;
+  toast: string;
+} {
+  if (kind === 'tetris_perfect') {
+    return { status: 'PERFECT TETRIS — BOARD WIPED!', toast: 'PERFECT TETRIS' };
+  }
+  if (kind === 'perfect') {
+    return { status: 'ALL CLEAR — EMPTY BOARD!', toast: 'ALL CLEAR' };
+  }
+  return { status: 'TETRIS!', toast: 'TETRIS!' };
+}
+
+function syncCelebrationAlert(): void {
+  const cele = game.celebration;
+  if (!cele) {
+    if (lastCelebrationKind !== null) {
+      lastCelebrationKind = null;
+      statusLine.classList.remove('is-alert', 'alert-tetris', 'alert-perfect', 'alert-tetris_perfect');
+      statusLine.textContent = hudStatusFallback || statusLine.textContent;
+      playAlert.hidden = true;
+      playAlert.classList.remove('is-on', 'kind-tetris', 'kind-perfect', 'kind-tetris_perfect');
+      crt.classList.remove('is-celebrate', 'is-celebrate-perfect');
+    }
+    return;
+  }
+
+  const copy = celebrationCopy(cele.kind);
+  if (lastCelebrationKind !== cele.kind) {
+    lastCelebrationKind = cele.kind;
+    statusLine.classList.remove('alert-tetris', 'alert-perfect', 'alert-tetris_perfect');
+    statusLine.classList.add('is-alert', `alert-${cele.kind}`);
+    statusLine.textContent = copy.status;
+
+    playAlert.hidden = false;
+    playAlert.textContent = copy.toast;
+    playAlert.classList.remove('kind-tetris', 'kind-perfect', 'kind-tetris_perfect');
+    playAlert.classList.add('is-on', `kind-${cele.kind}`);
+
+    crt.classList.remove('is-celebrate', 'is-celebrate-perfect');
+    // Retrigger CSS animation
+    void crt.offsetWidth;
+    crt.classList.add(
+      cele.kind === 'tetris' ? 'is-celebrate' : 'is-celebrate-perfect',
+    );
+  }
+}
 
 function paint(): void {
   if (game.state === STATE_START) {
@@ -60,12 +117,14 @@ function paint(): void {
     renderer.drawNextPanel(game.nextPieces);
     renderer.drawHoldPanel(game.holdPieceType, game.holdAvailable);
     renderer.drawScorePanel(game.score, game.highScore, game.level, game.linesCleared);
+    if (game.celebration) renderer.drawCelebration(game.celebration);
     if (game.state === STATE_PAUSED) renderer.drawPauseOverlay();
     if (game.state === STATE_GAME_OVER) {
       renderer.drawGameOverOverlay(game.score, game.highScore, game.isNewHighScore);
     }
   }
   renderer.drawSoundIndicator(sound.isEnabled());
+  syncCelebrationAlert();
 }
 
 /** Coalesce touch-driven paints to one per animation frame. */
@@ -141,9 +200,13 @@ function renderLeaderboard(): void {
 function refreshHud(): void {
   playerLabel.textContent = auth.displayName.toUpperCase();
   bestLabel.textContent = String(scores.highScore);
-  statusLine.textContent = auth.isSignedIn()
+  hudStatusFallback = auth.isSignedIn()
     ? `${auth.message} · ${scores.statusMessage}`
     : scores.statusMessage;
+  if (!game.celebration) {
+    statusLine.classList.remove('is-alert', 'alert-tetris', 'alert-perfect', 'alert-tetris_perfect');
+    statusLine.textContent = hudStatusFallback;
+  }
   authBlurb.textContent = auth.isSignedIn()
     ? `Signed in as ${auth.displayName}. Scores sync to Mac and iPhone.`
     : 'Sign in to sync one high score across Mac and iPhone.';
@@ -165,6 +228,15 @@ auth.onChange(() => {
 });
 
 void bootstrap();
+
+if (import.meta.env.DEV) {
+  window.__dntPreviewCelebration = (kind) => {
+    void sound.unlock();
+    if (game.state === STATE_START) game.touchStartFromTitle();
+    game.previewCelebration(kind);
+    schedulePaint();
+  };
+}
 
 function openAuth(): void {
   authError.hidden = true;
