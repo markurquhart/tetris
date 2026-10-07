@@ -33,6 +33,10 @@ export class Renderer {
   private tick = 0;
   private cellSprites = new Map<string, HTMLCanvasElement>();
   private boardBg: HTMLCanvasElement | null = null;
+  /** Frozen stack of locked cells — rebuilt only when board.revision changes. */
+  private boardStack: HTMLCanvasElement | null = null;
+  private boardStackRevision = -1;
+  private boardStackCtx: CanvasRenderingContext2D | null = null;
 
   constructor(ctx: CanvasRenderingContext2D) {
     this.ctx = ctx;
@@ -43,10 +47,10 @@ export class Renderer {
     this.ctx.fillStyle = '#05070c';
     this.ctx.fillRect(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
 
-    // Cheap dust — skip most frames on busy boards
-    if (this.tick % 3 === 0) {
-      this.ctx.fillStyle = 'rgba(255,200,120,0.07)';
-      for (let i = 0; i < 10; i++) {
+    // Ambient dust every few frames — keep it tiny so mid-game stays light
+    if (this.tick % 6 === 0) {
+      this.ctx.fillStyle = 'rgba(255,200,120,0.06)';
+      for (let i = 0; i < 6; i++) {
         const x = (i * 73 + this.tick) % WINDOW_WIDTH;
         const y = (i * 97) % WINDOW_HEIGHT;
         this.ctx.fillRect(x, y, 2, 2);
@@ -109,17 +113,66 @@ export class Renderer {
     return sprite;
   }
 
-  private drawCell(row: number, col: number, color: RGB, alpha = 255): void {
+  private drawCellOn(
+    target: CanvasRenderingContext2D,
+    row: number,
+    col: number,
+    color: RGB,
+    alpha = 255,
+  ): void {
     const x = BOARD_X + col * CELL_SIZE;
     const y = BOARD_Y + row * CELL_SIZE;
 
     if (alpha < 255) {
-      this.ctx.fillStyle = rgb(color, alpha / 255);
-      this.ctx.fillRect(x + 1, y + 1, CELL_SIZE - 2, CELL_SIZE - 2);
+      target.fillStyle = rgb(color, alpha / 255);
+      target.fillRect(x + 1, y + 1, CELL_SIZE - 2, CELL_SIZE - 2);
       return;
     }
 
-    this.ctx.drawImage(this.getCellSprite(color), x, y);
+    target.drawImage(this.getCellSprite(color), x, y);
+  }
+
+  private drawCell(row: number, col: number, color: RGB, alpha = 255): void {
+    this.drawCellOn(this.ctx, row, col, color, alpha);
+  }
+
+  private ensureBoardStack(): HTMLCanvasElement {
+    if (!this.boardStack) {
+      this.boardStack = document.createElement('canvas');
+      this.boardStack.width = WINDOW_WIDTH;
+      this.boardStack.height = WINDOW_HEIGHT;
+      this.boardStackCtx = this.boardStack.getContext('2d');
+    }
+    return this.boardStack;
+  }
+
+  private paintLockedCells(
+    target: CanvasRenderingContext2D,
+    board: Board,
+    lineClearProgress: number,
+  ): void {
+    for (let row = 0; row < BOARD_ROWS; row++) {
+      const gridRow = board.grid[row + BOARD_HIDDEN_ROWS];
+      const isClearing = board.isRowInClearAnimation(row);
+      for (let col = 0; col < BOARD_COLS; col++) {
+        const color = gridRow[col];
+        if (!color) continue;
+        if (isClearing) {
+          const cellsHidden = board.getRowClearProgress(row, lineClearProgress);
+          const center = BOARD_COLS / 2;
+          if (col < center - cellsHidden || col >= center + cellsHidden) {
+            this.drawCellOn(
+              target,
+              row,
+              col,
+              Math.floor(lineClearProgress * 10) % 2 === 0 ? WHITE : color,
+            );
+          }
+        } else {
+          this.drawCellOn(target, row, col, color);
+        }
+      }
+    }
   }
 
   drawBoardBackground(): void {
@@ -166,23 +219,24 @@ export class Renderer {
   }
 
   drawBoard(board: Board, lineClearProgress = 0): void {
-    const visible = board.getVisibleGrid();
-    for (let row = 0; row < BOARD_ROWS; row++) {
-      const isClearing = board.isRowInClearAnimation(row);
-      for (let col = 0; col < BOARD_COLS; col++) {
-        const color = visible[row][col];
-        if (!color) continue;
-        if (isClearing) {
-          const cellsHidden = board.getRowClearProgress(row, lineClearProgress);
-          const center = BOARD_COLS / 2;
-          if (col < center - cellsHidden || col >= center + cellsHidden) {
-            this.drawCell(row, col, Math.floor(lineClearProgress * 10) % 2 === 0 ? WHITE : color);
-          }
-        } else {
-          this.drawCell(row, col, color);
-        }
-      }
+    const animating = board.clearedLines.length > 0;
+
+    // Line-clear frames are unique — draw live, leave the stable cache alone.
+    if (animating) {
+      this.paintLockedCells(this.ctx, board, lineClearProgress);
+      return;
     }
+
+    const stack = this.ensureBoardStack();
+    if (this.boardStackRevision !== board.revision) {
+      const c = this.boardStackCtx!;
+      c.clearRect(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
+      this.paintLockedCells(c, board, 0);
+      this.boardStackRevision = board.revision;
+    }
+
+    // One blit regardless of how full the stack is — keeps mid-game paint flat.
+    this.ctx.drawImage(stack, 0, 0);
   }
 
   drawPiece(piece: Tetromino | null): void {
