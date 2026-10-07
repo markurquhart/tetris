@@ -1,4 +1,4 @@
-import { DAS_DELAY_FRAMES, DAS_REPEAT_FRAMES } from './constants';
+import { DAS_DELAY_MS, DAS_REPEAT_MS, SOFT_DROP_REPEAT_MS } from './constants';
 
 export interface InputActions {
   moveLeft: boolean;
@@ -21,12 +21,12 @@ export class InputHandler {
   leftHeld = false;
   rightHeld = false;
   downHeld = false;
-  leftDasCounter = 0;
-  rightDasCounter = 0;
-  downDasCounter = 0;
   leftInitialMove = false;
   rightInitialMove = false;
   downInitialMove = false;
+  private leftNextAt = 0;
+  private rightNextAt = 0;
+  private downNextAt = 0;
 
   private rotateCw = false;
   private rotateCcw = false;
@@ -46,12 +46,12 @@ export class InputHandler {
     this.leftHeld = false;
     this.rightHeld = false;
     this.downHeld = false;
-    this.leftDasCounter = 0;
-    this.rightDasCounter = 0;
-    this.downDasCounter = 0;
     this.leftInitialMove = false;
     this.rightInitialMove = false;
     this.downInitialMove = false;
+    this.leftNextAt = 0;
+    this.rightNextAt = 0;
+    this.downNextAt = 0;
     this.clearOneShots();
     this.pendingMoveLeft = 0;
     this.pendingMoveRight = 0;
@@ -79,18 +79,18 @@ export class InputHandler {
     switch (code) {
       case 'ArrowLeft':
         this.leftHeld = true;
-        this.leftDasCounter = 0;
         this.leftInitialMove = false;
+        this.leftNextAt = 0;
         break;
       case 'ArrowRight':
         this.rightHeld = true;
-        this.rightDasCounter = 0;
         this.rightInitialMove = false;
+        this.rightNextAt = 0;
         break;
       case 'ArrowDown':
         this.downHeld = true;
-        this.downDasCounter = 0;
         this.downInitialMove = false;
+        this.downNextAt = 0;
         this.levelDown = true;
         break;
       case 'ArrowUp':
@@ -136,18 +136,18 @@ export class InputHandler {
     switch (code) {
       case 'ArrowLeft':
         this.leftHeld = false;
-        this.leftDasCounter = 0;
         this.leftInitialMove = false;
+        this.leftNextAt = 0;
         break;
       case 'ArrowRight':
         this.rightHeld = false;
-        this.rightDasCounter = 0;
         this.rightInitialMove = false;
+        this.rightNextAt = 0;
         break;
       case 'ArrowDown':
         this.downHeld = false;
-        this.downDasCounter = 0;
         this.downInitialMove = false;
+        this.downNextAt = 0;
         break;
     }
   }
@@ -188,20 +188,24 @@ export class InputHandler {
   ): void {
     if (direction === 'left') {
       this.leftHeld = held;
-      this.leftDasCounter = 0;
       this.leftInitialMove = false;
+      this.leftNextAt = 0;
     } else if (direction === 'right') {
       this.rightHeld = held;
-      this.rightDasCounter = 0;
       this.rightInitialMove = false;
+      this.rightNextAt = 0;
     } else {
       this.downHeld = held;
-      this.downDasCounter = 0;
       this.downInitialMove = false;
+      this.downNextAt = 0;
     }
   }
 
-  update(): InputActions {
+  /**
+   * Sample held directions against wall-clock time so DAS/ARR stay crisp
+   * even when the sim drops or catches up frames under a busy board.
+   */
+  update(now = performance.now()): InputActions {
     const actions: InputActions = {
       moveLeft: this.pendingMoveLeft > 0,
       moveRight: this.pendingMoveRight > 0,
@@ -227,12 +231,10 @@ export class InputHandler {
       if (!this.leftInitialMove) {
         actions.moveLeft = true;
         this.leftInitialMove = true;
-      } else {
-        this.leftDasCounter += 1;
-        if (this.leftDasCounter >= DAS_DELAY_FRAMES) {
-          const repeatFrame = this.leftDasCounter - DAS_DELAY_FRAMES;
-          if (repeatFrame % DAS_REPEAT_FRAMES === 0) actions.moveLeft = true;
-        }
+        this.leftNextAt = now + DAS_DELAY_MS;
+      } else if (now >= this.leftNextAt) {
+        actions.moveLeft = true;
+        this.leftNextAt = Math.max(now, this.leftNextAt) + DAS_REPEAT_MS;
       }
     }
 
@@ -240,12 +242,10 @@ export class InputHandler {
       if (!this.rightInitialMove) {
         actions.moveRight = true;
         this.rightInitialMove = true;
-      } else {
-        this.rightDasCounter += 1;
-        if (this.rightDasCounter >= DAS_DELAY_FRAMES) {
-          const repeatFrame = this.rightDasCounter - DAS_DELAY_FRAMES;
-          if (repeatFrame % DAS_REPEAT_FRAMES === 0) actions.moveRight = true;
-        }
+        this.rightNextAt = now + DAS_DELAY_MS;
+      } else if (now >= this.rightNextAt) {
+        actions.moveRight = true;
+        this.rightNextAt = Math.max(now, this.rightNextAt) + DAS_REPEAT_MS;
       }
     }
 
@@ -253,9 +253,10 @@ export class InputHandler {
       if (!this.downInitialMove) {
         actions.softDrop = true;
         this.downInitialMove = true;
-      } else {
-        this.downDasCounter += 1;
-        if (this.downDasCounter % 2 === 0) actions.softDrop = true;
+        this.downNextAt = now + SOFT_DROP_REPEAT_MS;
+      } else if (now >= this.downNextAt) {
+        actions.softDrop = true;
+        this.downNextAt = Math.max(now, this.downNextAt) + SOFT_DROP_REPEAT_MS;
       }
     }
 

@@ -163,8 +163,14 @@ export const GRAVITY_FRAMES: Record<number, number> = {
 };
 
 export const LOCK_DELAY_FRAMES = 30;
-export const DAS_DELAY_FRAMES = 10;
-export const DAS_REPEAT_FRAMES = 2;
+/** Keyboard DAS charge time (~10 frames at 60fps). Wall-clock so mid-game hitching doesn't mush repeats. */
+export const DAS_DELAY_MS = Math.round((10 * 1000) / FPS);
+/** Keyboard ARR between repeats (~2 frames at 60fps). */
+export const DAS_REPEAT_MS = Math.round((2 * 1000) / FPS);
+/** Soft-drop repeat interval (~2 frames at 60fps). */
+export const SOFT_DROP_REPEAT_MS = Math.round((2 * 1000) / FPS);
+/** Max simulation steps per animation frame — prevents paint/input spiral under load. */
+export const MAX_CATCH_UP_FRAMES = 3;
 
 export const SCORE_SINGLE = 40;
 export const SCORE_DOUBLE = 100;
