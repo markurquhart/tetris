@@ -1,5 +1,8 @@
 import { Board } from './board';
 import {
+  CELEBRATION_PERFECT_FRAMES,
+  CELEBRATION_TETRIS_FRAMES,
+  CELEBRATION_TETRIS_PERFECT_FRAMES,
   GRAVITY_FRAMES,
   I_PIECE,
   J_PIECE,
@@ -11,6 +14,7 @@ import {
   S_PIECE,
   SCORE_DOUBLE,
   SCORE_HARD_DROP,
+  SCORE_PERFECT_CLEAR,
   SCORE_SINGLE,
   SCORE_SOFT_DROP,
   SCORE_TETRIS,
@@ -22,6 +26,8 @@ import {
   STATE_START,
   T_PIECE,
   Z_PIECE,
+  type Celebration,
+  type CelebrationKind,
   type GameState,
   type PieceType,
 } from './constants';
@@ -51,6 +57,8 @@ export class Game {
   lineClearCounter = 0;
   linesToClear: number[] = [];
   isNewHighScore = false;
+  /** Active Tetris / all-clear celebration banner + alert. */
+  celebration: Celebration | null = null;
   private sound: SoundManager;
 
   constructor(sound: SoundManager) {
@@ -76,6 +84,7 @@ export class Game {
     this.lockCounter = 0;
     this.isLocking = false;
     this.isNewHighScore = false;
+    this.celebration = null;
 
     this.refillBag();
     for (let i = 0; i < 3; i++) {
@@ -189,10 +198,32 @@ export class Game {
       this.lineClearCounter = 0;
       this.state = STATE_LINE_CLEAR;
       this.currentPiece = null;
-      this.sound.play(completeLines.length === 4 ? 'tetris' : 'line_clear');
+      if (completeLines.length === 4) {
+        this.beginCelebration('tetris');
+        this.sound.play('tetris');
+      } else {
+        this.sound.play('line_clear');
+      }
     } else {
       this.spawnPiece();
     }
+  }
+
+  private beginCelebration(kind: CelebrationKind): void {
+    const totalFrames =
+      kind === 'tetris_perfect'
+        ? CELEBRATION_TETRIS_PERFECT_FRAMES
+        : kind === 'perfect'
+          ? CELEBRATION_PERFECT_FRAMES
+          : CELEBRATION_TETRIS_FRAMES;
+    this.celebration = { kind, framesLeft: totalFrames, totalFrames };
+  }
+
+  /** Dev/demo helper — previews banner + SFX without needing a real clear. */
+  previewCelebration(kind: CelebrationKind): void {
+    this.beginCelebration(kind);
+    if (kind === 'perfect' || kind === 'tetris_perfect') this.sound.play('perfect_clear');
+    else this.sound.play('tetris');
   }
 
   private finishLineClear(): void {
@@ -206,12 +237,26 @@ export class Game {
     this.score += points;
     this.linesCleared += numLines;
 
+    // After lines drop away: empty board = perfect / all-clear.
+    if (this.board.isEmpty()) {
+      const kind: CelebrationKind = numLines === 4 ? 'tetris_perfect' : 'perfect';
+      this.beginCelebration(kind);
+      this.score += SCORE_PERFECT_CLEAR * levelMultiplier;
+      this.sound.play('perfect_clear');
+    }
+
     const oldLevel = this.level;
     this.level = this.selectedLevel + Math.floor(this.linesCleared / LINES_PER_LEVEL);
     if (this.level > oldLevel) this.sound.play('level_up');
 
     this.state = STATE_PLAYING;
     this.spawnPiece();
+  }
+
+  private tickCelebration(): void {
+    if (!this.celebration) return;
+    this.celebration.framesLeft -= 1;
+    if (this.celebration.framesLeft <= 0) this.celebration = null;
   }
 
   private doHardDrop(): void {
@@ -360,6 +405,7 @@ export class Game {
   update(): number | null {
     if (this.state === STATE_LINE_CLEAR) {
       this.lineClearCounter += 1;
+      this.tickCelebration();
       const progress = this.lineClearCounter / LINE_CLEAR_ANIMATION_FRAMES;
       if (this.lineClearCounter >= LINE_CLEAR_ANIMATION_FRAMES) {
         this.finishLineClear();
@@ -367,6 +413,8 @@ export class Game {
       }
       return progress;
     }
+
+    if (this.state === STATE_PLAYING) this.tickCelebration();
 
     if (this.state !== STATE_PLAYING || !this.currentPiece) return null;
 

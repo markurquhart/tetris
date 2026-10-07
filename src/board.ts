@@ -109,4 +109,14 @@ export class Board {
     }
     return false;
   }
+
+  /** True when no locked cells remain (perfect / all-clear). */
+  isEmpty(): boolean {
+    for (let row = 0; row < BOARD_TOTAL_ROWS; row++) {
+      for (let col = 0; col < BOARD_COLS; col++) {
+        if (this.grid[row][col] !== null) return false;
+      }
+    }
+    return true;
+  }
 }

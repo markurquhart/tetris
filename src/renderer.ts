@@ -20,6 +20,7 @@ import {
   WINDOW_HEIGHT,
   WINDOW_WIDTH,
   rgb,
+  type Celebration,
   type PieceType,
   type RGB,
 } from './constants';
@@ -399,6 +400,87 @@ export class Renderer {
     this.ctx.font = `14px ${UI}`;
     this.ctx.fillText('Press P / PAUSE to resume', WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2 + 28);
     this.ctx.textAlign = 'left';
+  }
+
+  /**
+   * Arcade banner for Tetris / all-clear. Progress 0→1 over the celebration lifetime.
+   * Kept light (no particle storms) so mid-game paint stays cheap.
+   */
+  drawCelebration(celebration: Celebration): void {
+    const progress = 1 - celebration.framesLeft / celebration.totalFrames;
+    const pulse = 0.55 + 0.45 * Math.abs(Math.sin(progress * Math.PI * 3));
+    const fade =
+      progress < 0.12 ? progress / 0.12 : progress > 0.82 ? (1 - progress) / 0.18 : 1;
+
+    const isPerfect =
+      celebration.kind === 'perfect' || celebration.kind === 'tetris_perfect';
+    const title =
+      celebration.kind === 'tetris_perfect'
+        ? 'PERFECT TETRIS'
+        : celebration.kind === 'perfect'
+          ? 'ALL CLEAR'
+          : 'TETRIS';
+    const subtitle =
+      celebration.kind === 'tetris_perfect'
+        ? 'FOUR LINES · BOARD WIPED'
+        : celebration.kind === 'perfect'
+          ? 'EMPTY BOARD'
+          : 'FOUR LINES';
+    const accent = isPerfect ? '#f0c14a' : '#7ef0e8';
+    const rim = isPerfect ? '#ff8a3d' : '#4ecdc4';
+
+    const bandY = BOARD_Y + BOARD_ROWS * CELL_SIZE * 0.38;
+    const bandH = 88;
+
+    this.ctx.save();
+    this.ctx.globalAlpha = 0.55 * fade;
+    this.ctx.fillStyle = '#05070c';
+    this.ctx.fillRect(BOARD_X - 2, bandY, BOARD_COLS * CELL_SIZE + 4, bandH);
+
+    this.ctx.globalAlpha = 0.85 * fade * pulse;
+    this.ctx.strokeStyle = rim;
+    this.ctx.lineWidth = isPerfect ? 3 : 2;
+    this.ctx.strokeRect(BOARD_X - 2, bandY, BOARD_COLS * CELL_SIZE + 4, bandH);
+
+    // Corner sparks — intentional motion without heavy particle systems
+    this.ctx.globalAlpha = fade;
+    for (let i = 0; i < 6; i++) {
+      const t = (progress * 2 + i * 0.17) % 1;
+      const x = BOARD_X + 8 + ((i * 47 + this.tick * 3) % (BOARD_COLS * CELL_SIZE - 16));
+      const y = bandY + 10 + t * (bandH - 20);
+      this.ctx.fillStyle = i % 2 === 0 ? accent : rim;
+      this.ctx.fillRect(x, y, 3, 3);
+    }
+
+    this.ctx.textAlign = 'center';
+    this.ctx.globalAlpha = fade;
+    this.ctx.fillStyle = accent;
+    this.ctx.font = `18px ${PIXEL}`;
+    const titleScale = 1 + 0.06 * Math.sin(progress * Math.PI * 4);
+    this.ctx.save();
+    this.ctx.translate(WINDOW_WIDTH / 2 - 40, bandY + 38);
+    this.ctx.scale(titleScale, titleScale);
+    this.ctx.fillText(title, 0, 0);
+    this.ctx.restore();
+
+    this.ctx.fillStyle = '#e8eef6';
+    this.ctx.font = `11px ${UI}`;
+    this.ctx.fillText(subtitle, WINDOW_WIDTH / 2 - 40, bandY + 62);
+    this.ctx.textAlign = 'left';
+    this.ctx.restore();
+
+    // Playfield rim flash
+    this.ctx.save();
+    this.ctx.globalAlpha = 0.35 * fade * pulse;
+    this.ctx.strokeStyle = rim;
+    this.ctx.lineWidth = 4;
+    this.ctx.strokeRect(
+      BOARD_X - 5,
+      BOARD_Y - 5,
+      BOARD_COLS * CELL_SIZE + 10,
+      BOARD_ROWS * CELL_SIZE + 10,
+    );
+    this.ctx.restore();
   }
 
   drawGameOverOverlay(score: number, highScore: number, isNewHigh: boolean): void {

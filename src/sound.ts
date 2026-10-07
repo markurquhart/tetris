@@ -5,6 +5,7 @@ type SoundName =
   | 'lock'
   | 'line_clear'
   | 'tetris'
+  | 'perfect_clear'
   | 'level_up'
   | 'hold'
   | 'game_over'
@@ -117,6 +118,11 @@ export class SoundManager {
         break;
       case 'tetris':
         this.arpeggio([523, 659, 784, 1047], 0.1, 0.25);
+        break;
+      case 'perfect_clear':
+        // Bigger fanfare than a normal Tetris — board wiped clean.
+        this.arpeggio([392, 523, 659, 784, 1047, 1319], 0.09, 0.28);
+        window.setTimeout(() => this.arpeggio([784, 1047, 1319], 0.12, 0.22), 560);
         break;
       case 'level_up':
         this.arpeggio([440, 554, 659, 880], 0.12, 0.22);
