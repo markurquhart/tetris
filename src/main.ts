@@ -162,7 +162,11 @@ bindPlayfieldGestures(
       void sound.unlock();
     },
     paint: schedulePaint,
-    move: (dir) => game.touchMove(dir),
+    getCol: () => game.getTouchCol(),
+    getRow: () => game.getTouchRow(),
+    getPieceEpoch: () => game.pieceEpoch,
+    seekCol: (col) => game.touchSeekCol(col),
+    seekRow: (row) => game.touchSeekRow(row),
     rotate: () => {
       game.touchRotate();
     },
