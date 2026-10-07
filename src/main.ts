@@ -28,7 +28,10 @@ declare global {
 }
 
 const canvas = document.querySelector<HTMLCanvasElement>('#game')!;
-const ctx = canvas.getContext('2d')!;
+// alpha:false + desynchronized lowers compositing latency on supporting browsers.
+const ctx =
+  canvas.getContext('2d', { alpha: false, desynchronized: true }) ??
+  canvas.getContext('2d')!;
 canvas.width = WINDOW_WIDTH;
 canvas.height = WINDOW_HEIGHT;
 
@@ -114,9 +117,15 @@ function paint(): void {
       }
     }
     renderer.drawPiece(game.currentPiece);
-    renderer.drawNextPanel(game.nextPieces);
-    renderer.drawHoldPanel(game.holdPieceType, game.holdAvailable);
-    renderer.drawScorePanel(game.score, game.highScore, game.level, game.linesCleared);
+    renderer.drawHud(
+      game.nextPieces,
+      game.holdPieceType,
+      game.holdAvailable,
+      game.score,
+      game.highScore,
+      game.level,
+      game.linesCleared,
+    );
     if (game.celebration) renderer.drawCelebration(game.celebration);
     if (game.state === STATE_PAUSED) renderer.drawPauseOverlay();
     if (game.state === STATE_GAME_OVER) {
@@ -127,11 +136,14 @@ function paint(): void {
   syncCelebrationAlert();
 }
 
-/** Coalesce touch-driven paints to one per animation frame. */
+/**
+ * Touch paint: microtask coalesce (faster than waiting on rAF when the
+ * sim loop is hitching). Same-tick multi-step moves still paint once.
+ */
 function schedulePaint(): void {
   if (paintQueued) return;
   paintQueued = true;
-  requestAnimationFrame(() => {
+  queueMicrotask(() => {
     paintQueued = false;
     paint();
   });
@@ -145,9 +157,7 @@ bindPlayfieldGestures(
       void sound.unlock();
     },
     paint: schedulePaint,
-    move: (dir) => {
-      game.touchMove(dir);
-    },
+    move: (dir) => game.touchMove(dir),
     rotate: () => {
       game.touchRotate();
     },

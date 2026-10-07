@@ -38,6 +38,10 @@ export class Renderer {
   private boardStack: HTMLCanvasElement | null = null;
   private boardStackRevision = -1;
   private boardStackCtx: CanvasRenderingContext2D | null = null;
+  /** Side panels (next/hold/score) — rebuild only when values change. */
+  private hudLayer: HTMLCanvasElement | null = null;
+  private hudLayerCtx: CanvasRenderingContext2D | null = null;
+  private hudKey = '';
 
   constructor(ctx: CanvasRenderingContext2D) {
     this.ctx = ctx;
@@ -306,14 +310,23 @@ export class Renderer {
     this.ctx.fillText(title, x + 12, y + 18);
   }
 
-  drawNextPanel(nextPieces: PieceType[]): void {
+  private drawNextPanelOn(target: CanvasRenderingContext2D, nextPieces: PieceType[]): void {
+    const prev = this.ctx;
+    this.ctx = target;
     this.panel(NEXT_PANEL_X, NEXT_PANEL_Y, 100, 190, 'NEXT');
     nextPieces.slice(0, 3).forEach((pieceType, i) => {
       this.drawPreviewPiece(pieceType, NEXT_PANEL_X + 10, NEXT_PANEL_Y + 25 + i * 55);
     });
+    this.ctx = prev;
   }
 
-  drawHoldPanel(holdPieceType: PieceType | null, holdAvailable: boolean): void {
+  private drawHoldPanelOn(
+    target: CanvasRenderingContext2D,
+    holdPieceType: PieceType | null,
+    holdAvailable: boolean,
+  ): void {
+    const prev = this.ctx;
+    this.ctx = target;
     this.panel(
       HOLD_PANEL_X,
       HOLD_PANEL_Y,
@@ -325,9 +338,18 @@ export class Renderer {
     if (holdPieceType !== null) {
       this.drawPreviewPiece(holdPieceType, HOLD_PANEL_X + 10, HOLD_PANEL_Y + 20);
     }
+    this.ctx = prev;
   }
 
-  drawScorePanel(score: number, highScore: number, level: number, lines: number): void {
+  private drawScorePanelOn(
+    target: CanvasRenderingContext2D,
+    score: number,
+    highScore: number,
+    level: number,
+    lines: number,
+  ): void {
+    const prev = this.ctx;
+    this.ctx = target;
     let y = SCORE_PANEL_Y;
     const rows: Array<[string, string, string]> = [
       ['SCORE', String(score), '#7ef0e8'],
@@ -344,6 +366,34 @@ export class Renderer {
       this.ctx.fillText(value, SCORE_PANEL_X, y + 22);
       y += 56;
     }
+    this.ctx = prev;
+  }
+
+  /** Blit cached next/hold/score — avoids font work on every input paint. */
+  drawHud(
+    nextPieces: PieceType[],
+    holdPieceType: PieceType | null,
+    holdAvailable: boolean,
+    score: number,
+    highScore: number,
+    level: number,
+    lines: number,
+  ): void {
+    const key = `${nextPieces.slice(0, 3).join(',')}|${holdPieceType}|${holdAvailable}|${score}|${highScore}|${level}|${lines}`;
+    if (!this.hudLayer) {
+      this.hudLayer = document.createElement('canvas');
+      this.hudLayer.width = WINDOW_WIDTH;
+      this.hudLayer.height = WINDOW_HEIGHT;
+      this.hudLayerCtx = this.hudLayer.getContext('2d');
+    }
+    if (this.hudKey !== key && this.hudLayerCtx) {
+      this.hudLayerCtx.clearRect(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
+      this.drawNextPanelOn(this.hudLayerCtx, nextPieces);
+      this.drawHoldPanelOn(this.hudLayerCtx, holdPieceType, holdAvailable);
+      this.drawScorePanelOn(this.hudLayerCtx, score, highScore, level, lines);
+      this.hudKey = key;
+    }
+    this.ctx.drawImage(this.hudLayer, 0, 0);
   }
 
   drawStartScreen(selectedLevel: number, playerName: string, status: string): void {
