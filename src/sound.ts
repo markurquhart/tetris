@@ -14,6 +14,7 @@ export class SoundManager {
   enabled = true;
   private ctx: AudioContext | null = null;
   private unlocked = false;
+  private lastMoveSoundAt = 0;
 
   private ensureContext(): AudioContext | null {
     if (typeof window === 'undefined') return null;
@@ -91,12 +92,17 @@ export class SoundManager {
 
   play(name: SoundName): void {
     if (!this.enabled) return;
-    void this.unlock();
+    if (!this.unlocked) void this.unlock();
 
     switch (name) {
-      case 'move':
+      case 'move': {
+        // Rapid swipe ARR used to spawn dozens of oscillators → GC hitch mid-game.
+        const t = performance.now();
+        if (t - this.lastMoveSoundAt < 45) return;
+        this.lastMoveSoundAt = t;
         this.tone(200, 0.03, 0.1);
         break;
+      }
       case 'rotate':
         this.tone(300, 0.05, 0.1);
         break;

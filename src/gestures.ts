@@ -1,25 +1,25 @@
 import type { InputHandler } from './input';
 
 /**
- * Incremental L/R: distance measured from the last step, with step size
- * scaled by finger velocity so light drags crawl and fast swipes keep up.
- * Limited multi-step catch-up when the browser coalesces pointermoves.
+ * Incremental L/R from last step. Step distance scales mildly with finger
+ * velocity so slow drags crawl and quick swipes keep up — without the prior
+ * oversensitive multi-step / tiny fast-step thresholds.
  */
-const FIRST_MOVE_PX = 18;
-const SLOW_STEP_PX = 42;
-const BASE_STEP_PX = 28;
-const FAST_STEP_PX = 14;
+const FIRST_MOVE_PX = 24;
+const SLOW_STEP_PX = 48;
+const BASE_STEP_PX = 34;
+const FAST_STEP_PX = 24;
 /** Horizontal velocity (px/ms) treated as a light/slow drag. */
-const VEL_SLOW = 0.08;
+const VEL_SLOW = 0.12;
 /** Horizontal velocity (px/ms) treated as a quick swipe. */
-const VEL_FAST = 0.55;
+const VEL_FAST = 0.7;
 const TAP_SLOP = 12;
 const FLICK_DISTANCE = 52;
 const FLICK_VELOCITY = 0.4; // px/ms
 const HOLD_MS = 420;
 const AXIS_LOCK_PX = 14;
-/** Cap cells applied per pointermove so a lag spike can't teleport the piece. */
-const MAX_STEPS_PER_EVENT = 3;
+/** Second cell only when a fast coalesced move clearly covers 2× the step. */
+const FAST_CATCHUP_STEPS = 2;
 
 export interface GestureHooks {
   unlock: () => void;
@@ -56,6 +56,8 @@ export function bindPlayfieldGestures(
   let sampleX = 0;
   let sampleY = 0;
   let sampleTime = 0;
+  /** Smoothed |vx| so a single coalesced jump doesn't jump to "fast" mode. */
+  let smoothVelX = 0;
   /** Finger X where the last L/R step was charged from. */
   let stepOriginX = 0;
   /** 0 until first L/R step this gesture; then -1 or 1. */
@@ -82,14 +84,13 @@ export function bindPlayfieldGestures(
   };
 
   const bump = () => {
-    hooks.unlock();
     hooks.paint();
   };
 
   const stepDistanceForVelocity = (velocityPxPerMs: number, isFirst: boolean): number => {
     if (isFirst) return FIRST_MOVE_PX;
     const t = Math.max(0, Math.min(1, (velocityPxPerMs - VEL_SLOW) / (VEL_FAST - VEL_SLOW)));
-    // Slow → large gap (few cells); fast → small gap (keeps up with swipe).
+    // Slow → large gap; fast → closer to FIRST, not twitchy micro-steps.
     if (t <= 0.5) {
       const u = t / 0.5;
       return SLOW_STEP_PX + (BASE_STEP_PX - SLOW_STEP_PX) * u;
@@ -127,6 +128,7 @@ export function bindPlayfieldGestures(
       startX = lastX = sampleX = stepOriginX = e.clientX;
       startY = lastY = sampleY = e.clientY;
       startTime = sampleTime = lastMoveTime = performance.now();
+      smoothVelX = 0;
       moveDir = 0;
       axisLock = 'none';
       longPressed = false;
@@ -165,6 +167,8 @@ export function bindPlayfieldGestures(
 
       const dt = Math.max(1, now - lastMoveTime);
       const instantVelX = Math.abs(e.clientX - lastX) / dt;
+      // EMA — dampens one-frame coalesced spikes that made swipes too hot.
+      smoothVelX = smoothVelX * 0.65 + instantVelX * 0.35;
       lastX = e.clientX;
       lastY = e.clientY;
       lastMoveTime = now;
@@ -196,13 +200,23 @@ export function bindPlayfieldGestures(
           return;
         }
 
+        const needed = stepDistanceForVelocity(smoothVelX, moveDir === 0);
+        const travel = Math.abs(e.clientX - stepOriginX);
+        if (travel < needed) return;
+
+        // Default: one cell. Fast coalesced moves may take a second if earned.
+        const maxSteps =
+          moveDir !== 0 && smoothVelX >= VEL_FAST && travel >= needed * 2
+            ? FAST_CATCHUP_STEPS
+            : 1;
+
         let stepped = false;
         let steps = 0;
-        while (steps < MAX_STEPS_PER_EVENT) {
-          const needed = stepDistanceForVelocity(instantVelX, moveDir === 0);
-          if (Math.abs(e.clientX - stepOriginX) < needed) break;
+        while (steps < maxSteps) {
+          const stepPx = stepDistanceForVelocity(smoothVelX, moveDir === 0);
+          if (Math.abs(e.clientX - stepOriginX) < stepPx) break;
           hooks.move(dir);
-          stepOriginX += dir * needed;
+          stepOriginX += dir * stepPx;
           moveDir = dir;
           consumed = true;
           stepped = true;

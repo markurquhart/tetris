@@ -9,6 +9,8 @@ import type { Tetromino } from './tetromino';
 export class Board {
   grid: (RGB | null)[][];
   clearedLines: number[];
+  /** Bumps when locked cells change — renderer uses this to keep a stack cache. */
+  revision = 0;
 
   constructor() {
     this.grid = this.emptyGrid();
@@ -21,9 +23,14 @@ export class Board {
     );
   }
 
+  private bump(): void {
+    this.revision += 1;
+  }
+
   reset(): void {
     this.grid = this.emptyGrid();
     this.clearedLines = [];
+    this.bump();
   }
 
   cellValid(row: number, col: number): boolean {
@@ -44,6 +51,7 @@ export class Board {
         this.grid[row][col] = piece.color;
       }
     }
+    this.bump();
     return cells.every(([row]) => row >= BOARD_HIDDEN_ROWS);
   }
 
@@ -66,10 +74,12 @@ export class Board {
     for (let i = 0; i < sorted.length; i++) {
       this.grid.unshift(Array.from({ length: BOARD_COLS }, () => null));
     }
+    this.bump();
   }
 
   startLineClearAnimation(lines: number[]): void {
     this.clearedLines = [...lines];
+    this.bump();
   }
 
   endLineClearAnimation(): number {
