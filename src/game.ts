@@ -69,15 +69,12 @@ export class Game {
   isNewHighScore = false;
   /** Active Tetris / all-clear celebration banner + alert. */
   celebration: Celebration | null = null;
-<<<<<<< HEAD
   /** Wall-clock start of the current run (ms since epoch). */
   playStartedAt = 0;
   tetrisCount = 0;
   perfectClearCount = 0;
-=======
   /** Bumps on every spawn — touch grab re-anchors if the piece changes mid-drag. */
   pieceEpoch = 0;
->>>>>>> 1ef5e7d (Unify mobile controls on cell-space finger-follow.)
   private sound: SoundManager;
 
   constructor(sound: SoundManager) {
@@ -104,13 +101,10 @@ export class Game {
     this.isLocking = false;
     this.isNewHighScore = false;
     this.celebration = null;
-<<<<<<< HEAD
     this.playStartedAt = performance.now();
     this.tetrisCount = 0;
     this.perfectClearCount = 0;
-=======
     this.pieceEpoch = 0;
->>>>>>> 1ef5e7d (Unify mobile controls on cell-space finger-follow.)
 
     this.refillBag();
     for (let i = 0; i < 3; i++) {
