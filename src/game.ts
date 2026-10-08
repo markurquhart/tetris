@@ -73,6 +73,8 @@ export class Game {
   playStartedAt = 0;
   tetrisCount = 0;
   perfectClearCount = 0;
+  /** Bumps on every spawn — touch grab re-anchors if the piece changes mid-drag. */
+  pieceEpoch = 0;
   private sound: SoundManager;
 
   constructor(sound: SoundManager) {
@@ -102,6 +104,7 @@ export class Game {
     this.playStartedAt = performance.now();
     this.tetrisCount = 0;
     this.perfectClearCount = 0;
+    this.pieceEpoch = 0;
 
     this.refillBag();
     for (let i = 0; i < 3; i++) {
@@ -148,6 +151,7 @@ export class Game {
     this.nextPieces.push(this.getNextPieceType());
 
     this.currentPiece = new Tetromino(pieceType);
+    this.pieceEpoch += 1;
     this.isLocking = false;
     this.lockCounter = 0;
     this.lockMovesRemaining = 15;
@@ -313,6 +317,7 @@ export class Game {
     } else {
       this.currentPiece = new Tetromino(this.holdPieceType);
       this.holdPieceType = currentType;
+      this.pieceEpoch += 1;
     }
     this.holdAvailable = false;
     this.isLocking = false;
@@ -399,6 +404,18 @@ export class Game {
     }
   }
 
+  /** Current piece column for finger-follow grab, or null if not controllable. */
+  getTouchCol(): number | null {
+    if (this.state !== STATE_PLAYING || !this.currentPiece) return null;
+    return this.currentPiece.col;
+  }
+
+  /** Current piece row for vertical finger-follow soft drop. */
+  getTouchRow(): number | null {
+    if (this.state !== STATE_PLAYING || !this.currentPiece) return null;
+    return this.currentPiece.row;
+  }
+
   /** Immediate touch nudge — same rules as handleInput, no queue wait. */
   touchMove(dCol: -1 | 1): boolean {
     if (this.state !== STATE_PLAYING || !this.currentPiece) return false;
@@ -409,6 +426,54 @@ export class Game {
       this.lockMovesRemaining -= 1;
     }
     return true;
+  }
+
+  /**
+   * Finger-follow: slide the piece to targetCol (one cell at a time).
+   * Stops at walls/stack; returns whether any cell moved.
+   */
+  touchSeekCol(targetCol: number): boolean {
+    if (this.state !== STATE_PLAYING || !this.currentPiece) return false;
+    let moved = false;
+    while (this.currentPiece.col < targetCol) {
+      if (!this.tryMove(0, 1)) break;
+      moved = true;
+      this.sound.play('move');
+      if (this.isLocking && this.lockMovesRemaining > 0) {
+        this.lockCounter = 0;
+        this.lockMovesRemaining -= 1;
+      }
+    }
+    while (this.currentPiece.col > targetCol) {
+      if (!this.tryMove(0, -1)) break;
+      moved = true;
+      this.sound.play('move');
+      if (this.isLocking && this.lockMovesRemaining > 0) {
+        this.lockCounter = 0;
+        this.lockMovesRemaining -= 1;
+      }
+    }
+    return moved;
+  }
+
+  /**
+   * Finger-follow soft drop: step the piece down toward targetRow (never up).
+   * Scores soft-drop points per cell; stops on ground.
+   */
+  touchSeekRow(targetRow: number): boolean {
+    if (this.state !== STATE_PLAYING || !this.currentPiece) return false;
+    let moved = false;
+    while (this.currentPiece.row < targetRow) {
+      if (!this.tryMove(1, 0)) break;
+      moved = true;
+      this.score += SCORE_SOFT_DROP;
+      this.gravityCounter = 0;
+      if (this.isLocking && this.lockMovesRemaining > 0) {
+        this.lockCounter = 0;
+        this.lockMovesRemaining -= 1;
+      }
+    }
+    return moved;
   }
 
   touchRotate(): boolean {
