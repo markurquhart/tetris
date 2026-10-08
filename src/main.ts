@@ -11,7 +11,11 @@ import {
   WINDOW_WIDTH,
 } from './constants';
 import { Game } from './game';
-import { bindPlayfieldGestures, preventMobilePageZoom } from './gestures';
+import {
+  bindPlayfieldGestures,
+  getLastGestureSource,
+  preventMobilePageZoom,
+} from './gestures';
 import { InputHandler } from './input';
 import { Renderer } from './renderer';
 import {
@@ -31,6 +35,7 @@ declare global {
     __dntPreviewCelebration?: (kind: 'tetris' | 'perfect' | 'tetris_perfect') => void;
     __dntTouchCol?: () => number | null;
     __dntTouchRow?: () => number | null;
+    __dntLastGestureSource?: () => string | null;
   }
 }
 
@@ -347,6 +352,12 @@ auth.onChange(() => {
 
 void bootstrap();
 
+// Touch probes are always attached (tiny) so demos can verify TouchEvent path
+// even when the production bundle sets import.meta.env.DEV === false for tsc.
+window.__dntTouchCol = () => game.getTouchCol();
+window.__dntTouchRow = () => game.getTouchRow();
+window.__dntLastGestureSource = () => getLastGestureSource();
+
 if (import.meta.env.DEV) {
   window.__dntPreviewCelebration = (kind) => {
     void sound.unlock();
@@ -354,8 +365,6 @@ if (import.meta.env.DEV) {
     game.previewCelebration(kind);
     schedulePaint();
   };
-  window.__dntTouchCol = () => game.getTouchCol();
-  window.__dntTouchRow = () => game.getTouchRow();
 }
 
 function openAuth(): void {

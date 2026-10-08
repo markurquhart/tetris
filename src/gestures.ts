@@ -2,36 +2,29 @@ import { CELL_SIZE, WINDOW_WIDTH } from './constants';
 import type { InputHandler } from './input';
 
 /**
- * Cell-space touch model with precision vs travel modes.
+ * Cell-space touch model — fingers on a **TouchEvent** path, mouse/pen on Pointer.
  *
- *   cell = CELL_SIZE * (crtWidth / WINDOW_WIDTH)
+ * First-touch goals:
+ *   - preventDefault on touchstart (kills scroll / click delay / ghost mouse)
+ *   - grab + scale ready on first contact
+ *   - snappy first-cell commit without waiting on a heavy precision gate
+ *   - axis lock engages early once direction is clear
  *
- * Precision (default): tiny nudges commit at most **1 cell**.
- * Travel: once the finger has clearly moved farther (TRAVEL_UNLOCK),
- *         seek follows grab + round(delta/cell) across the board.
- *
- * This is intentional classification — not a global sensitivity crank.
- *
- * Discrete (stricter vertical):
- *   Tap / long-press / swipe-up hold unchanged in spirit
- *   Hard drop only on a real downward flick (velocity + distance + vertical axis)
+ * Precision vs travel (unchanged intent):
+ *   Precision: at most 1 cell until finger travels TRAVEL_UNLOCK
+ *   Travel: round(delta / cell) for board-crossing drags
  */
-const TAP_SLOP_CELLS = 0.32;
-/** First 1-cell nudge in precision mode. */
-const PRECISION_COMMIT_CELLS = 0.55;
-/**
- * Finger must travel this far from grab before multi-cell follow unlocks.
- * Keeps a 1-cell nudge from leaping to 2–3 columns.
- */
+const TAP_SLOP_CELLS = 0.28;
+/** First 1-cell nudge — kept under half a cell so first contact feels immediate. */
+const PRECISION_COMMIT_CELLS = 0.38;
 const TRAVEL_UNLOCK_CELLS = 2.15;
 const FLICK_DISTANCE_CELLS = 1.85;
-/** Required for hard drop — distance alone never hard-drops. */
 const FLICK_VELOCITY = 0.55; // px/ms
 const FLICK_MAX_MS = 420;
 const HOLD_MS = 420;
-const AXIS_LOCK_CELLS = 0.42;
+/** Axis direction can lock once the finger clears this (was too high → first-move mush). */
+const AXIS_LOCK_CELLS = 0.22;
 const HOLD_SWIPE_UP_CELLS = 0.95;
-/** Escaping horizontal → vertical needs a clearer intent (stops false soft/hard drops). */
 const AXIS_H_TO_V_RATIO = 1.65;
 const AXIS_V_TO_H_RATIO = 1.35;
 
@@ -74,10 +67,6 @@ function readScale(surface: HTMLElement): Scale {
   };
 }
 
-/**
- * Precision: 0 or ±1 until travel unlocks.
- * Travel: round(dx/cell) so broad drags still cover the board.
- */
 function horizontalOffset(
   dx: number,
   cell: number,
@@ -100,7 +89,6 @@ function horizontalOffset(
   return { offset: Math.round(raw), travel: true };
 }
 
-/** Down-only soft drop with the same precision → travel gate. */
 function verticalDownOffset(
   dy: number,
   cell: number,
@@ -122,8 +110,16 @@ function verticalDownOffset(
   return { offset: Math.max(0, Math.round(dy / cell)), travel: true };
 }
 
+/** Last contact source that began a gesture (`touch` | `pointer`). For demos/tests. */
+let lastGestureSource: 'touch' | 'pointer' | null = null;
+
+export function getLastGestureSource(): 'touch' | 'pointer' | null {
+  return lastGestureSource;
+}
+
 /**
- * Touch / pointer gestures — precision nudges vs broad travel, cell-space throughout.
+ * Playfield gestures. Finger input is driven by TouchEvents; mouse/pen by PointerEvents.
+ * Touch and pointer never process the same contact (avoids double seeks).
  */
 export function bindPlayfieldGestures(
   surface: HTMLElement,
@@ -131,7 +127,10 @@ export function bindPlayfieldGestures(
   hooks: GestureHooks,
   isTitleScreen: () => boolean,
 ): void {
+  type Source = 'none' | 'touch' | 'pointer';
+  let source: Source = 'none';
   let pointerId: number | null = null;
+  let touchId: number | null = null;
   let startX = 0;
   let startY = 0;
   let lastX = 0;
@@ -228,9 +227,9 @@ export function bindPlayfieldGestures(
   const updateAxisLock = (absX: number, absY: number): void => {
     if (axisLock === 'none') {
       if (absX < scale.axisLock && absY < scale.axisLock) return;
-      // Prefer horizontal when close — L/R is the common precise action.
-      if (absX >= absY * 1.05) axisLock = 'h';
-      else if (absY > absX * 1.25) axisLock = 'v';
+      // Prefer horizontal when close — first-contact L/R is the common action.
+      if (absX >= absY * 0.95) axisLock = 'h';
+      else if (absY > absX * 1.15) axisLock = 'v';
       return;
     }
     if (axisLock === 'v' && absX > absY * AXIS_V_TO_H_RATIO) {
@@ -240,7 +239,6 @@ export function bindPlayfieldGestures(
     }
   };
 
-  /** Hard drop only for a short, fast, clearly vertical flick. */
   const isFlickDown = (
     dx: number,
     dy: number,
@@ -256,110 +254,98 @@ export function bindPlayfieldGestures(
     if (dy < scale.flickDist || absY < absX * 1.2) return false;
     if (axisLock !== 'v' && absY < absX * 1.5) return false;
     if (durationMs > FLICK_MAX_MS) return false;
-    const speed = Math.max(avgVelocity, recentVelocity);
-    return speed >= FLICK_VELOCITY;
+    return Math.max(avgVelocity, recentVelocity) >= FLICK_VELOCITY;
   };
 
-  surface.addEventListener(
-    'pointerdown',
-    (e) => {
-      if (e.pointerType === 'mouse' && e.button !== 0) return;
-      if (pointerId !== null) return;
-      e.preventDefault();
+  const beginContact = (clientX: number, clientY: number, src: Exclude<Source, 'none'>): void => {
+    scale = readScale(surface);
+    source = src;
+    lastGestureSource = src;
+    startX = lastX = sampleX = clientX;
+    startY = lastY = sampleY = clientY;
+    startTime = sampleTime = performance.now();
+    axisLock = 'none';
+    hTravel = false;
+    vTravel = false;
+    didHorizontal = false;
+    didVertical = false;
+    longPressed = false;
+    consumed = false;
+    regrab(clientX, clientY);
+    input.setHeld('down', false);
+    // Defer audio unlock so it never races first-move seek/paint.
+    queueMicrotask(() => hooks.unlock());
 
-      scale = readScale(surface);
-      pointerId = e.pointerId;
-      surface.setPointerCapture(e.pointerId);
-      startX = lastX = sampleX = e.clientX;
-      startY = lastY = sampleY = e.clientY;
-      startTime = sampleTime = performance.now();
-      axisLock = 'none';
-      hTravel = false;
-      vTravel = false;
-      didHorizontal = false;
-      didVertical = false;
-      longPressed = false;
-      consumed = false;
-      regrab(e.clientX, e.clientY);
-      input.setHeld('down', false);
-      hooks.unlock();
-
-      clearHoldTimer();
-      holdTimer = window.setTimeout(() => {
-        if (pointerId === null || consumed || isTitleScreen()) return;
-        const dx = lastX - startX;
-        const dy = lastY - startY;
-        if (Math.hypot(dx, dy) < scale.tapSlop) {
-          longPressed = true;
-          consumed = true;
-          hooks.hold();
-          bump();
-        }
-      }, HOLD_MS);
-    },
-    { passive: false },
-  );
-
-  surface.addEventListener(
-    'pointermove',
-    (e) => {
-      if (e.pointerId !== pointerId) return;
-      e.preventDefault();
-
-      const now = performance.now();
-      if (now - sampleTime >= 40) {
-        sampleX = lastX;
-        sampleY = lastY;
-        sampleTime = now;
+    clearHoldTimer();
+    holdTimer = window.setTimeout(() => {
+      if (source === 'none' || consumed || isTitleScreen()) return;
+      const dx = lastX - startX;
+      const dy = lastY - startY;
+      if (Math.hypot(dx, dy) < scale.tapSlop) {
+        longPressed = true;
+        consumed = true;
+        hooks.hold();
+        bump();
       }
+    }, HOLD_MS);
+  };
 
-      lastX = e.clientX;
-      lastY = e.clientY;
-
-      const dx = e.clientX - startX;
-      const dy = e.clientY - startY;
-      const absX = Math.abs(dx);
-      const absY = Math.abs(dy);
-
-      if (absX > scale.tapSlop || absY > scale.tapSlop) {
-        clearHoldTimer();
-      }
-
-      if (isTitleScreen()) return;
-
-      updateAxisLock(absX, absY);
-
-      if (axisLock === 'h' || (axisLock === 'none' && absX >= absY)) {
-        if (syncHorizontal(e.clientX, e.clientY)) {
-          consumed = true;
-          bump();
-        }
-        return;
-      }
-
-      if (axisLock === 'v' || (axisLock === 'none' && absY > absX)) {
-        if (dy > 0 && syncVertical(e.clientX, e.clientY)) {
-          consumed = true;
-          bump();
-        }
-      }
-    },
-    { passive: false },
-  );
-
-  const finish = (e: PointerEvent) => {
-    if (e.pointerId !== pointerId) return;
-    e.preventDefault();
-
+  const moveContact = (clientX: number, clientY: number): void => {
     const now = performance.now();
-    const dx = e.clientX - startX;
-    const dy = e.clientY - startY;
+    if (now - sampleTime >= 40) {
+      sampleX = lastX;
+      sampleY = lastY;
+      sampleTime = now;
+    }
+
+    lastX = clientX;
+    lastY = clientY;
+
+    const dx = clientX - startX;
+    const dy = clientY - startY;
+    const absX = Math.abs(dx);
+    const absY = Math.abs(dy);
+
+    if (absX > scale.tapSlop || absY > scale.tapSlop) {
+      clearHoldTimer();
+    }
+
+    if (isTitleScreen()) return;
+
+    updateAxisLock(absX, absY);
+
+    // Eager first-axis: once past tap slop with a clear winner, lock so the
+    // first cell can commit without waiting for a second threshold.
+    if (axisLock === 'none' && (absX > scale.tapSlop || absY > scale.tapSlop)) {
+      if (absX >= absY) axisLock = 'h';
+      else axisLock = 'v';
+    }
+
+    if (axisLock === 'h' || (axisLock === 'none' && absX >= absY)) {
+      if (syncHorizontal(clientX, clientY)) {
+        consumed = true;
+        bump();
+      }
+      return;
+    }
+
+    if (axisLock === 'v' || (axisLock === 'none' && absY > absX)) {
+      if (dy > 0 && syncVertical(clientX, clientY)) {
+        consumed = true;
+        bump();
+      }
+    }
+  };
+
+  const endContact = (clientX: number, clientY: number): void => {
+    const now = performance.now();
+    const dx = clientX - startX;
+    const dy = clientY - startY;
     const dt = Math.max(1, now - startTime);
     const dist = Math.hypot(dx, dy);
     const avgVelocity = dist / dt;
     const recentDt = Math.max(1, now - sampleTime);
-    const recentVelocity =
-      Math.hypot(e.clientX - sampleX, e.clientY - sampleY) / recentDt;
+    const recentVelocity = Math.hypot(clientX - sampleX, clientY - sampleY) / recentDt;
     const absX = Math.abs(dx);
     const absY = Math.abs(dy);
 
@@ -368,7 +354,7 @@ export function bindPlayfieldGestures(
 
     if (!longPressed && !isTitleScreen()) {
       if (axisLock === 'h' || (axisLock === 'none' && absX >= absY && absX >= scale.tapSlop)) {
-        if (syncHorizontal(e.clientX, e.clientY)) {
+        if (syncHorizontal(clientX, clientY)) {
           consumed = true;
           bump();
         }
@@ -376,7 +362,7 @@ export function bindPlayfieldGestures(
         (axisLock === 'v' || (axisLock === 'none' && absY > absX)) &&
         dy > 0
       ) {
-        if (syncVertical(e.clientX, e.clientY)) {
+        if (syncVertical(clientX, clientY)) {
           consumed = true;
           bump();
         }
@@ -397,7 +383,91 @@ export function bindPlayfieldGestures(
       }
     }
 
+    source = 'none';
     pointerId = null;
+    touchId = null;
+  };
+
+  // ── Finger path: real TouchEvents (primary on mobile) ───────────────────
+  surface.addEventListener(
+    'touchstart',
+    (e) => {
+      // Always preventDefault on the playfield — stops scroll, 300ms click
+      // delay, and compatibility mouse events that make first contact mushy.
+      e.preventDefault();
+      if (source !== 'none') return;
+      const t = e.changedTouches[0];
+      if (!t) return;
+      touchId = t.identifier;
+      beginContact(t.clientX, t.clientY, 'touch');
+    },
+    { passive: false },
+  );
+
+  surface.addEventListener(
+    'touchmove',
+    (e) => {
+      e.preventDefault();
+      if (source !== 'touch' || touchId === null) return;
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        const t = e.changedTouches[i];
+        if (t.identifier === touchId) {
+          moveContact(t.clientX, t.clientY);
+          break;
+        }
+      }
+    },
+    { passive: false },
+  );
+
+  const finishTouch = (e: TouchEvent) => {
+    e.preventDefault();
+    if (source !== 'touch' || touchId === null) return;
+    for (let i = 0; i < e.changedTouches.length; i++) {
+      const t = e.changedTouches[i];
+      if (t.identifier === touchId) {
+        endContact(t.clientX, t.clientY);
+        break;
+      }
+    }
+  };
+
+  surface.addEventListener('touchend', finishTouch, { passive: false });
+  surface.addEventListener('touchcancel', finishTouch, { passive: false });
+
+  // ── Mouse / pen path: PointerEvents (ignore touch — already handled) ────
+  surface.addEventListener(
+    'pointerdown',
+    (e) => {
+      if (e.pointerType === 'touch') return; // TouchEvent path owns fingers
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      if (source !== 'none') return;
+      e.preventDefault();
+      pointerId = e.pointerId;
+      try {
+        surface.setPointerCapture(e.pointerId);
+      } catch {
+        // ignore
+      }
+      beginContact(e.clientX, e.clientY, 'pointer');
+    },
+    { passive: false },
+  );
+
+  surface.addEventListener(
+    'pointermove',
+    (e) => {
+      if (source !== 'pointer' || e.pointerId !== pointerId) return;
+      e.preventDefault();
+      moveContact(e.clientX, e.clientY);
+    },
+    { passive: false },
+  );
+
+  const finishPointer = (e: PointerEvent) => {
+    if (source !== 'pointer' || e.pointerId !== pointerId) return;
+    e.preventDefault();
+    endContact(e.clientX, e.clientY);
     try {
       surface.releasePointerCapture(e.pointerId);
     } catch {
@@ -405,23 +475,8 @@ export function bindPlayfieldGestures(
     }
   };
 
-  surface.addEventListener('pointerup', finish, { passive: false });
-  surface.addEventListener('pointercancel', finish, { passive: false });
-
-  surface.addEventListener(
-    'touchstart',
-    (e) => {
-      if (e.touches.length > 1) e.preventDefault();
-    },
-    { passive: false },
-  );
-  surface.addEventListener(
-    'touchmove',
-    (e) => {
-      e.preventDefault();
-    },
-    { passive: false },
-  );
+  surface.addEventListener('pointerup', finishPointer, { passive: false });
+  surface.addEventListener('pointercancel', finishPointer, { passive: false });
 
   if (typeof ResizeObserver !== 'undefined') {
     const ro = new ResizeObserver(() => {
