@@ -29,6 +29,8 @@ applyUiTheme();
 declare global {
   interface Window {
     __dntPreviewCelebration?: (kind: 'tetris' | 'perfect' | 'tetris_perfect') => void;
+    __dntTouchCol?: () => number | null;
+    __dntTouchRow?: () => number | null;
   }
 }
 
@@ -352,6 +354,8 @@ if (import.meta.env.DEV) {
     game.previewCelebration(kind);
     schedulePaint();
   };
+  window.__dntTouchCol = () => game.getTouchCol();
+  window.__dntTouchRow = () => game.getTouchRow();
 }
 
 function openAuth(): void {
