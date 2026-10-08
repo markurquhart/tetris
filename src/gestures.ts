@@ -2,31 +2,38 @@ import { CELL_SIZE, WINDOW_WIDTH } from './constants';
 import type { InputHandler } from './input';
 
 /**
- * Unified mobile touch model — everything in on-screen cell space.
+ * Cell-space touch model with precision vs travel modes.
  *
- *   displayedCell = CELL_SIZE * (crtWidth / WINDOW_WIDTH)
+ *   cell = CELL_SIZE * (crtWidth / WINDOW_WIDTH)
  *
- * Continuous drags (finger-follow):
- *   L/R:  desiredCol = grabCol + round(dx / cell)
- *   Soft: desiredRow = grabRow + max(0, round(dy / cell))
+ * Precision (default): tiny nudges commit at most **1 cell**.
+ * Travel: once the finger has clearly moved farther (TRAVEL_UNLOCK),
+ *         seek follows grab + round(delta/cell) across the board.
  *
- * Discrete actions (same cell units for thresholds):
- *   Tap (< tapSlop)     → rotate / start
- *   Long-press           → hold
- *   Swipe up (≥ 1 cell)  → hold
- *   Flick down           → hard drop
+ * This is intentional classification — not a global sensitivity crank.
  *
- * No velocity-scaled step sizes. Axis lock can escape if the other axis
- * clearly dominates so diagonal jitter can't steal the gesture forever.
+ * Discrete (stricter vertical):
+ *   Tap / long-press / swipe-up hold unchanged in spirit
+ *   Hard drop only on a real downward flick (velocity + distance + vertical axis)
  */
 const TAP_SLOP_CELLS = 0.32;
-const FIRST_COMMIT_CELLS = 0.42;
-const FLICK_DISTANCE_CELLS = 1.55;
-const FLICK_VELOCITY = 0.45; // px/ms — discrete flick only
+/** First 1-cell nudge in precision mode. */
+const PRECISION_COMMIT_CELLS = 0.55;
+/**
+ * Finger must travel this far from grab before multi-cell follow unlocks.
+ * Keeps a 1-cell nudge from leaping to 2–3 columns.
+ */
+const TRAVEL_UNLOCK_CELLS = 2.15;
+const FLICK_DISTANCE_CELLS = 1.85;
+/** Required for hard drop — distance alone never hard-drops. */
+const FLICK_VELOCITY = 0.55; // px/ms
+const FLICK_MAX_MS = 420;
 const HOLD_MS = 420;
-const AXIS_LOCK_CELLS = 0.38;
-const HOLD_SWIPE_UP_CELLS = 0.9;
-const AXIS_RELOCK_RATIO = 1.35;
+const AXIS_LOCK_CELLS = 0.42;
+const HOLD_SWIPE_UP_CELLS = 0.95;
+/** Escaping horizontal → vertical needs a clearer intent (stops false soft/hard drops). */
+const AXIS_H_TO_V_RATIO = 1.65;
+const AXIS_V_TO_H_RATIO = 1.35;
 
 export interface GestureHooks {
   unlock: () => void;
@@ -48,6 +55,8 @@ interface Scale {
   axisLock: number;
   holdUp: number;
   flickDist: number;
+  precisionCommit: number;
+  travelUnlock: number;
 }
 
 function readScale(surface: HTMLElement): Scale {
@@ -60,23 +69,61 @@ function readScale(surface: HTMLElement): Scale {
     axisLock: cell * AXIS_LOCK_CELLS,
     holdUp: cell * HOLD_SWIPE_UP_CELLS,
     flickDist: cell * FLICK_DISTANCE_CELLS,
+    precisionCommit: cell * PRECISION_COMMIT_CELLS,
+    travelUnlock: cell * TRAVEL_UNLOCK_CELLS,
   };
 }
 
-function offsetFromDx(dx: number, cell: number): number {
+/**
+ * Precision: 0 or ±1 until travel unlocks.
+ * Travel: round(dx/cell) so broad drags still cover the board.
+ */
+function horizontalOffset(
+  dx: number,
+  cell: number,
+  travel: boolean,
+  precisionCommit: number,
+  travelUnlock: number,
+): { offset: number; travel: boolean } {
+  const abs = Math.abs(dx);
+  const sign = dx < 0 ? -1 : 1;
+  let nowTravel = travel;
+  if (!nowTravel && abs >= travelUnlock) nowTravel = true;
+
+  if (!nowTravel) {
+    if (abs < precisionCommit) return { offset: 0, travel: false };
+    return { offset: sign, travel: false };
+  }
+
   const raw = dx / cell;
-  if (Math.abs(raw) < FIRST_COMMIT_CELLS) return 0;
-  return Math.round(raw);
+  if (Math.abs(raw) < PRECISION_COMMIT_CELLS) return { offset: 0, travel: true };
+  return { offset: Math.round(raw), travel: true };
 }
 
-/** Down-only soft-drop offset (never negative). */
-function downOffsetFromDy(dy: number, cell: number): number {
-  if (dy < cell * FIRST_COMMIT_CELLS) return 0;
-  return Math.max(0, Math.round(dy / cell));
+/** Down-only soft drop with the same precision → travel gate. */
+function verticalDownOffset(
+  dy: number,
+  cell: number,
+  travel: boolean,
+  precisionCommit: number,
+  travelUnlock: number,
+): { offset: number; travel: boolean } {
+  if (dy <= 0) return { offset: 0, travel };
+  const abs = dy;
+  let nowTravel = travel;
+  if (!nowTravel && abs >= travelUnlock) nowTravel = true;
+
+  if (!nowTravel) {
+    if (abs < precisionCommit) return { offset: 0, travel: false };
+    return { offset: 1, travel: false };
+  }
+
+  if (abs < cell * PRECISION_COMMIT_CELLS) return { offset: 0, travel: true };
+  return { offset: Math.max(0, Math.round(dy / cell)), travel: true };
 }
 
 /**
- * Touch / pointer gestures on the playfield — one cell-space model for all moves.
+ * Touch / pointer gestures — precision nudges vs broad travel, cell-space throughout.
  */
 export function bindPlayfieldGestures(
   surface: HTMLElement,
@@ -99,6 +146,10 @@ export function bindPlayfieldGestures(
   let grabRow = 0;
   let grabEpoch = -1;
   let axisLock: 'none' | 'h' | 'v' = 'none';
+  let hTravel = false;
+  let vTravel = false;
+  let didHorizontal = false;
+  let didVertical = false;
   let holdTimer: number | null = null;
   let longPressed = false;
   let consumed = false;
@@ -124,6 +175,8 @@ export function bindPlayfieldGestures(
     grabCol = col;
     grabRow = row;
     grabEpoch = hooks.getPieceEpoch();
+    hTravel = false;
+    vTravel = false;
     return true;
   };
 
@@ -138,46 +191,73 @@ export function bindPlayfieldGestures(
     if (!ensureGrab(clientX, clientY)) return false;
     const col = hooks.getCol();
     if (col === null) return false;
-    const desired = grabCol + offsetFromDx(clientX - grabX, scale.cell);
+    const { offset, travel } = horizontalOffset(
+      clientX - grabX,
+      scale.cell,
+      hTravel,
+      scale.precisionCommit,
+      scale.travelUnlock,
+    );
+    hTravel = travel;
+    const desired = grabCol + offset;
     if (desired === col) return false;
-    return hooks.seekCol(desired);
+    const moved = hooks.seekCol(desired);
+    if (moved) didHorizontal = true;
+    return moved;
   };
 
   const syncVertical = (clientX: number, clientY: number): boolean => {
     if (!ensureGrab(clientX, clientY)) return false;
     const row = hooks.getRow();
     if (row === null) return false;
-    const desired = grabRow + downOffsetFromDy(clientY - grabY, scale.cell);
+    const { offset, travel } = verticalDownOffset(
+      clientY - grabY,
+      scale.cell,
+      vTravel,
+      scale.precisionCommit,
+      scale.travelUnlock,
+    );
+    vTravel = travel;
+    const desired = grabRow + offset;
     if (desired <= row) return false;
-    return hooks.seekRow(desired);
+    const moved = hooks.seekRow(desired);
+    if (moved) didVertical = true;
+    return moved;
   };
 
   const updateAxisLock = (absX: number, absY: number): void => {
     if (axisLock === 'none') {
       if (absX < scale.axisLock && absY < scale.axisLock) return;
-      if (absX > absY * 1.12) axisLock = 'h';
-      else if (absY > absX * 1.12) axisLock = 'v';
+      // Prefer horizontal when close — L/R is the common precise action.
+      if (absX >= absY * 1.05) axisLock = 'h';
+      else if (absY > absX * 1.25) axisLock = 'v';
       return;
     }
-    if (axisLock === 'v' && absX > absY * AXIS_RELOCK_RATIO) axisLock = 'h';
-    else if (axisLock === 'h' && absY > absX * AXIS_RELOCK_RATIO) axisLock = 'v';
+    if (axisLock === 'v' && absX > absY * AXIS_V_TO_H_RATIO) {
+      axisLock = 'h';
+    } else if (axisLock === 'h' && absY > absX * AXIS_H_TO_V_RATIO) {
+      axisLock = 'v';
+    }
   };
 
+  /** Hard drop only for a short, fast, clearly vertical flick. */
   const isFlickDown = (
     dx: number,
     dy: number,
     avgVelocity: number,
     recentVelocity: number,
+    durationMs: number,
   ): boolean => {
+    if (isTitleScreen()) return false;
+    if (didHorizontal && !didVertical) return false;
+    if (axisLock === 'h') return false;
     const absX = Math.abs(dx);
     const absY = Math.abs(dy);
-    if (isTitleScreen()) return false;
-    if (dy < scale.flickDist || absY < absX * 0.85) return false;
-    return (
-      avgVelocity >= FLICK_VELOCITY ||
-      recentVelocity >= FLICK_VELOCITY ||
-      dy >= scale.flickDist * 1.25
-    );
+    if (dy < scale.flickDist || absY < absX * 1.2) return false;
+    if (axisLock !== 'v' && absY < absX * 1.5) return false;
+    if (durationMs > FLICK_MAX_MS) return false;
+    const speed = Math.max(avgVelocity, recentVelocity);
+    return speed >= FLICK_VELOCITY;
   };
 
   surface.addEventListener(
@@ -194,10 +274,13 @@ export function bindPlayfieldGestures(
       startY = lastY = sampleY = e.clientY;
       startTime = sampleTime = performance.now();
       axisLock = 'none';
+      hTravel = false;
+      vTravel = false;
+      didHorizontal = false;
+      didVertical = false;
       longPressed = false;
       consumed = false;
       regrab(e.clientX, e.clientY);
-      // Clear any stale soft-drop hold from a previous broken gesture.
       input.setHeld('down', false);
       hooks.unlock();
 
@@ -246,7 +329,7 @@ export function bindPlayfieldGestures(
 
       updateAxisLock(absX, absY);
 
-      if (axisLock === 'h' || (axisLock === 'none' && absX > absY)) {
+      if (axisLock === 'h' || (axisLock === 'none' && absX >= absY)) {
         if (syncHorizontal(e.clientX, e.clientY)) {
           consumed = true;
           bump();
@@ -254,8 +337,7 @@ export function bindPlayfieldGestures(
         return;
       }
 
-      if (axisLock === 'v' || (axisLock === 'none' && absY >= absX)) {
-        // Up-swipe hold is handled on pointerup; down = finger-follow soft drop.
+      if (axisLock === 'v' || (axisLock === 'none' && absY > absX)) {
         if (dy > 0 && syncVertical(e.clientX, e.clientY)) {
           consumed = true;
           bump();
@@ -285,13 +367,13 @@ export function bindPlayfieldGestures(
     input.setHeld('down', false);
 
     if (!longPressed && !isTitleScreen()) {
-      if (axisLock === 'h' || (axisLock === 'none' && absX > absY && absX >= scale.tapSlop)) {
+      if (axisLock === 'h' || (axisLock === 'none' && absX >= absY && absX >= scale.tapSlop)) {
         if (syncHorizontal(e.clientX, e.clientY)) {
           consumed = true;
           bump();
         }
       } else if (
-        (axisLock === 'v' || (axisLock === 'none' && absY >= absX)) &&
+        (axisLock === 'v' || (axisLock === 'none' && absY > absX)) &&
         dy > 0
       ) {
         if (syncVertical(e.clientX, e.clientY)) {
@@ -301,7 +383,7 @@ export function bindPlayfieldGestures(
       }
     }
 
-    if (!longPressed && isFlickDown(dx, dy, avgVelocity, recentVelocity)) {
+    if (!longPressed && isFlickDown(dx, dy, avgVelocity, recentVelocity, dt)) {
       hooks.hardDrop();
       bump();
     } else if (!longPressed && !consumed) {
@@ -309,7 +391,7 @@ export function bindPlayfieldGestures(
         if (isTitleScreen()) hooks.start();
         else hooks.rotate();
         bump();
-      } else if (!isTitleScreen() && dy <= -scale.holdUp && absY > absX) {
+      } else if (!isTitleScreen() && dy <= -scale.holdUp && absY > absX * 1.15) {
         hooks.hold();
         bump();
       }
