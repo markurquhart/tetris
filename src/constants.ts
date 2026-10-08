@@ -172,6 +172,12 @@ export const SOFT_DROP_REPEAT_MS = Math.round((2 * 1000) / FPS);
 /** Max simulation steps per animation frame — prevents paint/input spiral under load. */
 export const MAX_CATCH_UP_FRAMES = 3;
 
+/**
+ * Mobile control spike: fat hold L/R zones + DAS/ARR instead of finger-follow
+ * seekCol. Override with `?controls=gestures` to restore the old path.
+ */
+export const TOUCH_SCHEME_BUTTON_DAS_DEFAULT = true;
+
 export const SCORE_SINGLE = 40;
 export const SCORE_DOUBLE = 100;
 export const SCORE_TRIPLE = 300;

@@ -611,6 +611,12 @@ input {
   justify-content: center;
 }
 
+/* Theme rules set display:flex on mobile — don't let that resurrect [hidden]. */
+.gesture-legend[hidden],
+.touch-pad[hidden] {
+  display: none !important;
+}
+
 .dock-btn {
   flex: 1 0 auto;
   min-width: 48px;
@@ -633,6 +639,109 @@ input {
 
 .gesture-legend span {
   white-space: nowrap;
+}
+
+/* ── Mobile button + DAS pad (spike) ─────────────────────────────────────── */
+.touch-pad {
+  display: none;
+  gap: 6px;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.touch-pad-move {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.touch-pad-actions {
+  display: grid;
+  grid-template-columns: 1fr 1.15fr 1.15fr 0.9fr;
+  gap: 6px;
+}
+
+.touch-zone {
+  appearance: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: 76px;
+  margin: 0;
+  padding: 8px 6px;
+  border: 1px solid color-mix(in srgb, var(--line) 80%, var(--accent) 20%);
+  border-radius: 12px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), transparent 42%),
+    color-mix(in srgb, var(--panel) 88%, #000);
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  transition:
+    background 80ms ease,
+    border-color 80ms ease,
+    transform 80ms ease;
+}
+
+.touch-zone-glyph {
+  font-size: 1.15rem;
+  line-height: 1;
+  color: var(--accent-hot);
+  opacity: 0.92;
+}
+
+.touch-zone-label {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 0.42rem;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.touch-zone-hold {
+  min-height: 80px;
+}
+
+.touch-zone-down {
+  min-height: 72px;
+}
+
+.touch-zone-drop {
+  border-color: color-mix(in srgb, var(--danger) 55%, var(--line));
+  background:
+    linear-gradient(180deg, rgba(232, 93, 93, 0.18), transparent 50%),
+    color-mix(in srgb, var(--panel) 88%, #000);
+}
+
+.touch-zone-drop .touch-zone-glyph {
+  color: #ff9b9b;
+}
+
+.touch-zone-action[data-action='rotate'] {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  background:
+    linear-gradient(180deg, rgba(78, 205, 196, 0.16), transparent 50%),
+    color-mix(in srgb, var(--panel) 88%, #000);
+}
+
+.touch-zone.is-pressed {
+  transform: translateY(1px) scale(0.985);
+  background:
+    linear-gradient(180deg, rgba(126, 240, 232, 0.22), transparent 55%),
+    color-mix(in srgb, var(--panel) 70%, var(--accent));
+  border-color: var(--accent);
+}
+
+.touch-zone-drop.is-pressed {
+  background:
+    linear-gradient(180deg, rgba(232, 93, 93, 0.32), transparent 55%),
+    color-mix(in srgb, var(--panel) 65%, var(--danger));
+  border-color: var(--danger);
 }
 
 .desktop-hint {
@@ -759,6 +868,19 @@ input {
 
   .dock-btn {
     padding: 9px 5px;
+  }
+
+  body.touch-scheme-buttons .dock {
+    gap: 6px;
+  }
+
+  body.touch-scheme-buttons .touch-pad {
+    display: grid;
+  }
+
+  body.touch-scheme-buttons .dock-actions .dock-btn {
+    padding: 7px 5px;
+    font-size: 0.68rem;
   }
 }
 

@@ -84,13 +84,49 @@
       </div>
 
       <footer class="dock">
-        <p class="gesture-legend">
+        <p class="gesture-legend" id="gesture-legend-buttons">
+          <span>hold ← → DAS</span>
+          <span>↓ soft</span>
+          <span>ROTATE / DROP</span>
+          <span>tap board rotate</span>
+        </p>
+        <p class="gesture-legend" id="gesture-legend-gestures" hidden>
           <span>drag ←→ follow</span>
           <span>drag ↓ soft</span>
           <span>flick↓ drop</span>
           <span>tap rotate</span>
           <span>↑ / hold</span>
         </p>
+        <div class="touch-pad" id="touch-pad" aria-label="Mobile controls" hidden>
+          <div class="touch-pad-move" role="group" aria-label="Move">
+            <button type="button" class="touch-zone touch-zone-hold" data-hold="left" aria-label="Move left">
+              <span class="touch-zone-glyph" aria-hidden="true">◀</span>
+              <span class="touch-zone-label">LEFT</span>
+            </button>
+            <button type="button" class="touch-zone touch-zone-hold" data-hold="right" aria-label="Move right">
+              <span class="touch-zone-glyph" aria-hidden="true">▶</span>
+              <span class="touch-zone-label">RIGHT</span>
+            </button>
+          </div>
+          <div class="touch-pad-actions" role="group" aria-label="Actions">
+            <button type="button" class="touch-zone touch-zone-hold touch-zone-down" data-hold="down" aria-label="Soft drop">
+              <span class="touch-zone-glyph" aria-hidden="true">▼</span>
+              <span class="touch-zone-label">SOFT</span>
+            </button>
+            <button type="button" class="touch-zone touch-zone-action" data-action="rotate" aria-label="Rotate">
+              <span class="touch-zone-glyph" aria-hidden="true">↻</span>
+              <span class="touch-zone-label">ROTATE</span>
+            </button>
+            <button type="button" class="touch-zone touch-zone-action touch-zone-drop" data-action="hardDrop" aria-label="Hard drop">
+              <span class="touch-zone-glyph" aria-hidden="true">⬇</span>
+              <span class="touch-zone-label">DROP</span>
+            </button>
+            <button type="button" class="touch-zone touch-zone-action" data-action="hold" aria-label="Hold piece">
+              <span class="touch-zone-glyph" aria-hidden="true">▮</span>
+              <span class="touch-zone-label">HOLD</span>
+            </button>
+          </div>
+        </div>
         <div class="dock-actions">
           <button type="button" class="dock-btn primary" id="btn-play">START</button>
           <button type="button" class="dock-btn" id="btn-level-down">LVL−</button>

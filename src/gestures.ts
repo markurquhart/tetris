@@ -1,18 +1,15 @@
 import { CELL_SIZE, WINDOW_WIDTH } from './constants';
 import type { InputHandler } from './input';
+import { isButtonDasScheme } from './touchScheme';
 
 /**
  * Cell-space touch model — fingers on a **TouchEvent** path, mouse/pen on Pointer.
  *
- * First-touch goals:
- *   - preventDefault on touchstart (kills scroll / click delay / ghost mouse)
- *   - grab + scale ready on first contact
- *   - snappy first-cell commit without waiting on a heavy precision gate
- *   - axis lock engages early once direction is clear
+ * When `TOUCH_SCHEME_BUTTON_DAS` is on (default), horizontal seekCol / precision-
+ * travel and flick hard-drop are OFF. Canvas keeps optional tap-rotate; soft drop
+ * uses setHeld('down') on a downward drag (not the same continuum as hard drop).
  *
- * Precision vs travel (unchanged intent):
- *   Precision: at most 1 cell until finger travels TRAVEL_UNLOCK
- *   Travel: round(delta / cell) for board-crossing drags
+ * Legacy finger-follow (precision vs travel) remains behind `?controls=gestures`.
  */
 const TAP_SLOP_CELLS = 0.28;
 /** First 1-cell nudge — kept under half a cell so first contact feels immediate. */
@@ -127,6 +124,7 @@ export function bindPlayfieldGestures(
   hooks: GestureHooks,
   isTitleScreen: () => boolean,
 ): void {
+  const buttonDas = isButtonDasScheme();
   type Source = 'none' | 'touch' | 'pointer';
   let source: Source = 'none';
   let pointerId: number | null = null;
@@ -149,6 +147,7 @@ export function bindPlayfieldGestures(
   let vTravel = false;
   let didHorizontal = false;
   let didVertical = false;
+  let softHeld = false;
   let holdTimer: number | null = null;
   let longPressed = false;
   let consumed = false;
@@ -257,6 +256,12 @@ export function bindPlayfieldGestures(
     return Math.max(avgVelocity, recentVelocity) >= FLICK_VELOCITY;
   };
 
+  const releaseSoft = () => {
+    if (!softHeld) return;
+    softHeld = false;
+    input.setHeld('down', false);
+  };
+
   const beginContact = (clientX: number, clientY: number, src: Exclude<Source, 'none'>): void => {
     scale = readScale(surface);
     source = src;
@@ -269,10 +274,12 @@ export function bindPlayfieldGestures(
     vTravel = false;
     didHorizontal = false;
     didVertical = false;
+    softHeld = false;
     longPressed = false;
     consumed = false;
     regrab(clientX, clientY);
-    input.setHeld('down', false);
+    // Legacy path clears soft-drop on new contact; button DAS leaves pad holds alone.
+    if (!buttonDas) input.setHeld('down', false);
     // Defer audio unlock so it never races first-move seek/paint.
     queueMicrotask(() => hooks.unlock());
 
@@ -312,6 +319,22 @@ export function bindPlayfieldGestures(
 
     if (isTitleScreen()) return;
 
+    // Button+DAS scheme: no seekCol / precision-travel. Optional soft-drop hold
+    // on a clear downward drag; hard drop is dock-only (never from this drag).
+    if (buttonDas) {
+      if (dy > scale.tapSlop && absY > absX * 1.15) {
+        if (!softHeld) {
+          softHeld = true;
+          input.setHeld('down', true);
+          consumed = true;
+          bump();
+        }
+      } else if (softHeld && (dy <= scale.tapSlop || absX >= absY)) {
+        releaseSoft();
+      }
+      return;
+    }
+
     updateAxisLock(absX, absY);
 
     // Eager first-axis: once past tap slop with a clear winner, lock so the
@@ -350,6 +373,27 @@ export function bindPlayfieldGestures(
     const absY = Math.abs(dy);
 
     clearHoldTimer();
+    releaseSoft();
+
+    if (buttonDas) {
+      // No flick hard-drop on the soft-drop continuum; tap = rotate (or start).
+      // Do not clear pad DOWN holds — only releaseSoft() undoes canvas soft-drop.
+      if (!longPressed && !consumed) {
+        if (dist < scale.tapSlop) {
+          if (isTitleScreen()) hooks.start();
+          else hooks.rotate();
+          bump();
+        } else if (!isTitleScreen() && dy <= -scale.holdUp && absY > absX * 1.15) {
+          hooks.hold();
+          bump();
+        }
+      }
+      source = 'none';
+      pointerId = null;
+      touchId = null;
+      return;
+    }
+
     input.setHeld('down', false);
 
     if (!longPressed && !isTitleScreen()) {

@@ -641,6 +641,11 @@ html[data-ui='7'] .ui-preview-badge {
     grid-template-rows: minmax(0, 1fr);
   }
 
+  /* Button+DAS pad needs real dock height so zones don't cover the board. */
+  html[data-ui='7'].touch-scheme-buttons .shell {
+    grid-template-rows: minmax(0, 1fr) auto;
+  }
+
   html[data-ui='7'] .topbar {
     position: absolute;
     z-index: 5;
@@ -719,8 +724,20 @@ html[data-ui='7'] .ui-preview-badge {
     left: 0;
     right: 0;
     bottom: 0;
-    padding: 28px 8px max(10px, env(safe-area-inset-bottom));
-    background: linear-gradient(0deg, rgba(8, 10, 20, 0.92), transparent);
+    padding: 18px 8px max(10px, env(safe-area-inset-bottom));
+    background: linear-gradient(0deg, rgba(8, 10, 20, 0.94) 55%, transparent);
+  }
+
+  html[data-ui='7'].touch-scheme-buttons .dock {
+    position: relative;
+    z-index: 5;
+    left: auto;
+    right: auto;
+    bottom: auto;
+    padding: 8px 8px max(10px, env(safe-area-inset-bottom));
+    background:
+      linear-gradient(180deg, rgba(8, 10, 20, 0.55), rgba(8, 10, 20, 0.96));
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
   }
 
   html[data-ui='7'] .gesture-legend {
@@ -734,6 +751,43 @@ html[data-ui='7'] .ui-preview-badge {
 
   html[data-ui='7'] #btn-scores-toggle {
     display: inline-flex !important;
+  }
+
+  html[data-ui='7'] .touch-zone {
+    border-radius: 14px;
+    border-color: rgba(255, 255, 255, 0.14);
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.08), transparent 45%),
+      rgba(255, 255, 255, 0.06);
+  }
+
+  html[data-ui='7'] .touch-zone-glyph {
+    color: #ff8f74;
+  }
+
+  html[data-ui='7'] .touch-zone-action[data-action='rotate'] {
+    border-color: rgba(255, 107, 74, 0.45);
+    background:
+      linear-gradient(180deg, rgba(255, 107, 74, 0.2), transparent 50%),
+      rgba(255, 255, 255, 0.06);
+  }
+
+  html[data-ui='7'] .touch-zone-drop {
+    border-color: rgba(255, 107, 74, 0.55);
+    background:
+      linear-gradient(180deg, rgba(255, 107, 74, 0.28), transparent 50%),
+      rgba(255, 255, 255, 0.05);
+  }
+
+  html[data-ui='7'] .touch-zone-drop .touch-zone-glyph {
+    color: #ffb39f;
+  }
+
+  html[data-ui='7'] .touch-zone.is-pressed {
+    background:
+      linear-gradient(180deg, rgba(255, 107, 74, 0.35), transparent 55%),
+      rgba(255, 107, 74, 0.18);
+    border-color: #ff6b4a;
   }
 }
 
