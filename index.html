@@ -56,8 +56,15 @@
         </main>
 
         <aside class="side-stack" id="side-stack" aria-label="Scores and account">
-          <div class="rail leaderboard-panel" aria-label="High scores">
-            <div class="panel-title">HI-SCORES</div>
+          <div class="rail leaderboard-panel" aria-label="Leaderboards">
+            <div class="panel-title">BOARDS</div>
+            <div class="board-tabs" id="board-tabs" role="tablist" aria-label="Leaderboard type">
+              <button type="button" class="board-tab is-active" data-board="score" role="tab" aria-selected="true">SCORE</button>
+              <button type="button" class="board-tab" data-board="lines" role="tab" aria-selected="false">LINES</button>
+              <button type="button" class="board-tab" data-board="time" role="tab" aria-selected="false">TIME</button>
+              <button type="button" class="board-tab" data-board="awards" role="tab" aria-selected="false">AWARDS</button>
+              <button type="button" class="board-tab" data-board="bestLines" role="tab" aria-selected="false">BEST LN</button>
+            </div>
             <ol id="leaderboard" class="leaderboard">
               <li class="empty">Waiting for challengers…</li>
             </ol>
@@ -66,9 +73,12 @@
           <div class="rail auth-summary" aria-label="Account">
             <div class="panel-title">OPERATOR</div>
             <p id="auth-blurb" class="auth-blurb">
-              Sign in to sync one high score across Mac and iPhone.
+              Sign in to sync scores, career stats, and game history.
             </p>
-            <button type="button" class="dock-btn primary" id="btn-auth-open-side">PLAYER LOGIN</button>
+            <div class="operator-actions">
+              <button type="button" class="dock-btn primary" id="btn-auth-open-side">PLAYER LOGIN</button>
+              <button type="button" class="dock-btn" id="btn-profile-open" hidden>PROFILE</button>
+            </div>
           </div>
         </aside>
       </div>
@@ -94,10 +104,41 @@
       </footer>
     </div>
 
+    <dialog id="profile-modal" class="auth-modal">
+      <div class="auth-card profile-card">
+        <div class="auth-marquee">PROFILE</div>
+        <p id="profile-subtitle" class="auth-hint">Career stats &amp; history</p>
+
+        <label class="profile-name-field">
+          Display name
+          <span class="profile-name-row">
+            <input id="profile-name" maxlength="24" autocomplete="nickname" placeholder="ACE" />
+            <button type="button" class="dock-btn" id="btn-profile-save-name">SAVE</button>
+          </span>
+        </label>
+        <p id="profile-name-msg" class="auth-error" role="status" hidden></p>
+
+        <div class="profile-stats" id="profile-stats" aria-label="Career stats"></div>
+
+        <div class="profile-latest" id="profile-latest" aria-label="Most recent game"></div>
+
+        <div class="panel-title profile-section-title">AWARDS</div>
+        <ul id="profile-awards" class="award-list"></ul>
+
+        <div class="panel-title profile-section-title">RECENT GAMES</div>
+        <p class="profile-privacy-note">Timestamps visible to you only.</p>
+        <ol id="profile-history" class="history-list"></ol>
+
+        <div class="auth-actions">
+          <button type="button" class="dock-btn ghost" id="btn-profile-close">CLOSE</button>
+        </div>
+      </div>
+    </dialog>
+
     <dialog id="auth-modal" class="auth-modal">
       <form method="dialog" id="auth-form" class="auth-card">
         <div class="auth-marquee">PLAYER LOGIN</div>
-        <p class="auth-hint">Email + password · scores sync to your account</p>
+        <p class="auth-hint">Email + password · career &amp; scores sync to your account</p>
 
         <label>
           Display name

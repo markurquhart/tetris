@@ -1,6 +1,6 @@
 # Tetris Arcade (Mac + iPhone)
 
-Web arcade cabinet port of the Python Tetris game. Email login, Postgres scores in Supabase, public leaderboard, installable as a PWA.
+Web arcade cabinet port of the Python Tetris game. Email login, Postgres career stats + game history in Supabase, multi-leaderboards, installable as a PWA.
 
 **Production domain:** [def-not-tetris.com](https://def-not-tetris.com)
 
@@ -56,9 +56,12 @@ After that: `git push origin main` → live on the domain in about a minute.
 ## Play
 
 - **Guest**: play locally anytime
-- **LOGIN / CREATE**: account scores sync across Mac & iPhone
-- **HI-SCORES**: top players from the database
+- **LOGIN / CREATE**: email/password — career, awards, and every finished game sync across Mac & iPhone
+- **PROFILE**: career totals, awards, recent games (timestamps for you only)
+- **BOARDS**: Score · Career lines · Play time · Awards · Best single-game lines
 - iPhone: Safari → Share → Add to Home Screen
+
+After pulling schema changes, re-run [`supabase/schema.sql`](./supabase/schema.sql) in the Supabase SQL editor (idempotent).
 
 ## Scripts
 

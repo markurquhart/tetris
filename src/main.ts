@@ -14,7 +14,12 @@ import { Game } from './game';
 import { bindPlayfieldGestures, preventMobilePageZoom } from './gestures';
 import { InputHandler } from './input';
 import { Renderer } from './renderer';
-import { ScoreService } from './scores';
+import {
+  formatEndedAt,
+  formatPlayTime,
+  ScoreService,
+  type LeaderboardKind,
+} from './scores';
 import { SoundManager } from './sound';
 import { applyUiTheme } from './ui';
 
@@ -179,6 +184,7 @@ const bestLabel = document.querySelector<HTMLElement>('#best-label')!;
 const statusLine = document.querySelector<HTMLElement>('#status-line')!;
 const authBlurb = document.querySelector<HTMLElement>('#auth-blurb')!;
 const leaderboardEl = document.querySelector<HTMLOListElement>('#leaderboard')!;
+const boardTabs = document.querySelector<HTMLElement>('#board-tabs')!;
 const authModal = document.querySelector<HTMLDialogElement>('#auth-modal')!;
 const authForm = document.querySelector<HTMLFormElement>('#auth-form')!;
 const authError = document.querySelector<HTMLElement>('#auth-error')!;
@@ -188,6 +194,22 @@ const authPassword = document.querySelector<HTMLInputElement>('#auth-password')!
 const btnSignOut = document.querySelector<HTMLButtonElement>('#btn-signout')!;
 const btnAuthOpen = document.querySelector<HTMLButtonElement>('#btn-auth-open')!;
 const btnAuthOpenSide = document.querySelector<HTMLButtonElement>('#btn-auth-open-side')!;
+const btnProfileOpen = document.querySelector<HTMLButtonElement>('#btn-profile-open')!;
+const profileModal = document.querySelector<HTMLDialogElement>('#profile-modal')!;
+const profileName = document.querySelector<HTMLInputElement>('#profile-name')!;
+const profileNameMsg = document.querySelector<HTMLElement>('#profile-name-msg')!;
+const profileStats = document.querySelector<HTMLElement>('#profile-stats')!;
+const profileLatest = document.querySelector<HTMLElement>('#profile-latest')!;
+const profileAwards = document.querySelector<HTMLUListElement>('#profile-awards')!;
+const profileHistory = document.querySelector<HTMLOListElement>('#profile-history')!;
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
 
 function renderLeaderboard(): void {
   if (!scores.leaderboard.length) {
@@ -200,16 +222,94 @@ function renderLeaderboard(): void {
       (entry, i) => `
       <li>
         <span class="rank">${String(i + 1).padStart(2, '0')}</span>
-        <span class="name">${entry.displayName}</span>
-        <span class="pts">${entry.highScore}</span>
+        <span class="name">${escapeHtml(entry.displayName)}</span>
+        <span class="pts">${escapeHtml(entry.displayValue)}</span>
       </li>`,
     )
     .join('');
 }
 
+function renderProfilePanel(): void {
+  const career = scores.career;
+  if (!career) {
+    profileStats.innerHTML = '<p class="auth-blurb">No career data yet.</p>';
+    profileLatest.innerHTML = '';
+    profileAwards.innerHTML = '';
+    profileHistory.innerHTML = '<li class="empty">Sign in and finish a game.</li>';
+    return;
+  }
+
+  profileName.value = career.displayName === 'PLAYER' ? auth.displayName : career.displayName;
+
+  profileStats.innerHTML = [
+    ['GAMES', String(career.totalGames)],
+    ['LINES', String(career.totalLinesCleared)],
+    ['PLAY', formatPlayTime(career.totalPlayMs)],
+    ['BEST', String(career.bestScore)],
+    ['BEST LN', String(career.bestLinesInGame)],
+    ['AWARDS', String(career.awardsCount)],
+  ]
+    .map(
+      ([label, value]) => `
+      <div class="profile-stat">
+        <span>${label}</span>
+        <strong>${escapeHtml(value)}</strong>
+      </div>`,
+    )
+    .join('');
+
+  // Public-safe teaser: most recent game without timestamp
+  if (career.totalGames > 0) {
+    profileLatest.innerHTML = `
+      <div class="panel-title profile-section-title">LATEST RUN</div>
+      <p class="latest-run">
+        ${career.latestScore} pts · ${career.latestLines} lines · Lv ${career.latestLevel}
+      </p>`;
+  } else {
+    profileLatest.innerHTML = '';
+  }
+
+  if (!scores.awards.length) {
+    profileAwards.innerHTML = '<li class="empty">Awards unlock as you play.</li>';
+  } else {
+    profileAwards.innerHTML = scores.awards
+      .map(
+        (a) => `
+        <li class="${a.earned ? 'is-earned' : 'is-locked'}" title="${escapeHtml(a.description)}">
+          <span class="award-title">${escapeHtml(a.title)}</span>
+          <span class="award-state">${a.earned ? 'EARNED' : 'LOCKED'}</span>
+        </li>`,
+      )
+      .join('');
+  }
+
+  if (!scores.history.length) {
+    profileHistory.innerHTML =
+      '<li class="empty">No saved games yet — finish a run while signed in.</li>';
+  } else {
+    profileHistory.innerHTML = scores.history
+      .map((run) => {
+        const when = run.endedAt ? formatEndedAt(run.endedAt) : '';
+        return `
+        <li>
+          <span class="hist-score">${run.score}</span>
+          <span class="hist-meta">${run.linesCleared} ln · Lv ${run.levelReached} · ${formatPlayTime(run.durationMs)}</span>
+          <span class="hist-when">${escapeHtml(when)}</span>
+        </li>`;
+      })
+      .join('');
+  }
+}
+
+const playerStat = playerLabel.closest('.stat') as HTMLElement | null;
+
 function refreshHud(): void {
   playerLabel.textContent = auth.displayName.toUpperCase();
   bestLabel.textContent = String(scores.highScore);
+  playerStat?.classList.toggle('is-clickable', auth.isSignedIn());
+  if (playerStat) {
+    playerStat.title = auth.isSignedIn() ? 'Open profile' : '';
+  }
   hudStatusFallback = auth.isSignedIn()
     ? `${auth.message} · ${scores.statusMessage}`
     : scores.statusMessage;
@@ -218,13 +318,15 @@ function refreshHud(): void {
     statusLine.textContent = hudStatusFallback;
   }
   authBlurb.textContent = auth.isSignedIn()
-    ? `Signed in as ${auth.displayName}. Scores sync to Mac and iPhone.`
-    : 'Sign in to sync one high score across Mac and iPhone.';
+    ? `Signed in as ${auth.displayName}. Career, history, and boards sync across devices.`
+    : 'Sign in to sync career stats, awards, and every finished game.';
   btnSignOut.hidden = !auth.isSignedIn();
   btnAuthOpen.hidden = auth.isSignedIn();
   if (btnAuthOpenSide) btnAuthOpenSide.hidden = auth.isSignedIn();
+  btnProfileOpen.hidden = !auth.isSignedIn();
   game.setHighScore(scores.highScore);
   renderLeaderboard();
+  if (profileModal.open) renderProfilePanel();
 }
 
 async function bootstrap(): Promise<void> {
@@ -263,7 +365,60 @@ btnAuthOpen.addEventListener('click', openAuth);
 btnAuthOpenSide?.addEventListener('click', openAuth);
 document.querySelector('#btn-auth-close')?.addEventListener('click', closeAuth);
 
+function openProfile(): void {
+  if (!auth.isSignedIn()) {
+    openAuth();
+    return;
+  }
+  profileNameMsg.hidden = true;
+  profileNameMsg.textContent = '';
+  renderProfilePanel();
+  profileModal.showModal();
+}
+
+function closeProfile(): void {
+  if (profileModal.open) profileModal.close();
+}
+
+btnProfileOpen.addEventListener('click', openProfile);
+playerStat?.addEventListener('click', () => {
+  if (auth.isSignedIn()) openProfile();
+});
+document.querySelector('#btn-profile-close')?.addEventListener('click', closeProfile);
+
+document.querySelector('#btn-profile-save-name')?.addEventListener('click', async () => {
+  profileNameMsg.hidden = true;
+  const err = await auth.updateDisplayName(profileName.value);
+  if (err) {
+    profileNameMsg.hidden = false;
+    profileNameMsg.textContent = err;
+    return;
+  }
+  await scores.loadProfileBundle();
+  refreshHud();
+  profileNameMsg.hidden = false;
+  profileNameMsg.classList.add('is-ok');
+  profileNameMsg.textContent = 'Name saved';
+  setTimeout(() => {
+    profileNameMsg.hidden = true;
+    profileNameMsg.classList.remove('is-ok');
+  }, 1600);
+});
+
+boardTabs?.addEventListener('click', (e) => {
+  const btn = (e.target as HTMLElement | null)?.closest<HTMLButtonElement>('[data-board]');
+  if (!btn?.dataset.board) return;
+  const kind = btn.dataset.board as LeaderboardKind;
+  for (const tab of boardTabs.querySelectorAll<HTMLButtonElement>('.board-tab')) {
+    const on = tab === btn;
+    tab.classList.toggle('is-active', on);
+    tab.setAttribute('aria-selected', on ? 'true' : 'false');
+  }
+  void scores.setLeaderboardKind(kind).then(renderLeaderboard);
+});
+
 btnSignOut.addEventListener('click', async () => {
+  closeProfile();
   await auth.signOut();
   await scores.refresh();
   refreshHud();
@@ -380,7 +535,7 @@ function frame(now: number): void {
 
     if (game.state === STATE_GAME_OVER && !wasGameOver && !lastGameOverHandled) {
       lastGameOverHandled = true;
-      void scores.submit(game.score).then(() => {
+      void scores.submit(game.getRunSummary()).then(() => {
         game.setHighScore(scores.highScore);
         refreshHud();
       });

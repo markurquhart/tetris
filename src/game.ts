@@ -37,6 +37,16 @@ import { Tetromino } from './tetromino';
 
 const ALL_PIECES: PieceType[] = [I_PIECE, O_PIECE, T_PIECE, S_PIECE, Z_PIECE, J_PIECE, L_PIECE];
 
+export interface GameRunSummary {
+  score: number;
+  linesCleared: number;
+  levelReached: number;
+  startLevel: number;
+  durationMs: number;
+  tetrisCount: number;
+  perfectClears: number;
+}
+
 export class Game {
   board = new Board();
   state: GameState = STATE_START;
@@ -59,6 +69,10 @@ export class Game {
   isNewHighScore = false;
   /** Active Tetris / all-clear celebration banner + alert. */
   celebration: Celebration | null = null;
+  /** Wall-clock start of the current run (ms since epoch). */
+  playStartedAt = 0;
+  tetrisCount = 0;
+  perfectClearCount = 0;
   private sound: SoundManager;
 
   constructor(sound: SoundManager) {
@@ -85,12 +99,32 @@ export class Game {
     this.isLocking = false;
     this.isNewHighScore = false;
     this.celebration = null;
+    this.playStartedAt = performance.now();
+    this.tetrisCount = 0;
+    this.perfectClearCount = 0;
 
     this.refillBag();
     for (let i = 0; i < 3; i++) {
       this.nextPieces.push(this.getNextPieceType());
     }
     this.spawnPiece();
+  }
+
+  /** Snapshot for cloud history / career sync at game over. */
+  getRunSummary(): GameRunSummary {
+    const durationMs =
+      this.playStartedAt > 0
+        ? Math.max(0, Math.round(performance.now() - this.playStartedAt))
+        : 0;
+    return {
+      score: this.score,
+      linesCleared: this.linesCleared,
+      levelReached: this.level,
+      startLevel: this.selectedLevel,
+      durationMs: Math.min(durationMs, 86_400_000),
+      tetrisCount: this.tetrisCount,
+      perfectClears: this.perfectClearCount,
+    };
   }
 
   private refillBag(): void {
@@ -199,6 +233,7 @@ export class Game {
       this.state = STATE_LINE_CLEAR;
       this.currentPiece = null;
       if (completeLines.length === 4) {
+        this.tetrisCount += 1;
         this.beginCelebration('tetris');
         this.sound.play('tetris');
       } else {
@@ -239,6 +274,7 @@ export class Game {
 
     // After lines drop away: empty board = perfect / all-clear.
     if (this.board.isEmpty()) {
+      this.perfectClearCount += 1;
       const kind: CelebrationKind = numLines === 4 ? 'tetris_perfect' : 'perfect';
       this.beginCelebration(kind);
       this.score += SCORE_PERFECT_CLEAR * levelMultiplier;
