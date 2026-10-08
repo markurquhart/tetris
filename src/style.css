@@ -611,6 +611,12 @@ input {
   justify-content: center;
 }
 
+/* Theme rules set display:flex on mobile — don't let that resurrect [hidden]. */
+.gesture-legend[hidden],
+.touch-pad[hidden] {
+  display: none !important;
+}
+
 .dock-btn {
   flex: 1 0 auto;
   min-width: 48px;
