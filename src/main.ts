@@ -25,10 +25,24 @@ import {
   type LeaderboardKind,
 } from './scores';
 import { SoundManager } from './sound';
+import { isButtonDasScheme } from './touchScheme';
+import { bindTouchPad } from './touchPad';
 import { applyUiTheme } from './ui';
 
 preventMobilePageZoom();
 applyUiTheme();
+
+const buttonDas = isButtonDasScheme();
+document.body.classList.toggle('touch-scheme-buttons', buttonDas);
+document.body.classList.toggle('touch-scheme-gestures', !buttonDas);
+document.documentElement.classList.toggle('touch-scheme-buttons', buttonDas);
+
+const touchPad = document.querySelector<HTMLElement>('#touch-pad');
+const legendButtons = document.querySelector<HTMLElement>('#gesture-legend-buttons');
+const legendGestures = document.querySelector<HTMLElement>('#gesture-legend-gestures');
+if (touchPad) touchPad.hidden = !buttonDas;
+if (legendButtons) legendButtons.hidden = !buttonDas;
+if (legendGestures) legendGestures.hidden = buttonDas;
 
 declare global {
   interface Window {
@@ -36,6 +50,7 @@ declare global {
     __dntTouchCol?: () => number | null;
     __dntTouchRow?: () => number | null;
     __dntLastGestureSource?: () => string | null;
+    __dntTouchScheme?: () => string;
   }
 }
 
@@ -189,6 +204,28 @@ bindPlayfieldGestures(
   },
   () => game.state === STATE_START,
 );
+
+if (buttonDas && touchPad) {
+  bindTouchPad(touchPad, input, {
+    unlock: () => {
+      void sound.unlock();
+    },
+    paint: schedulePaint,
+    rotate: () => {
+      game.touchRotate();
+    },
+    hardDrop: () => {
+      game.touchHardDrop();
+    },
+    hold: () => {
+      game.touchHold();
+    },
+    isPlayable: () =>
+      game.state !== STATE_START &&
+      game.state !== STATE_GAME_OVER &&
+      game.state !== STATE_PAUSED,
+  });
+}
 
 const playerLabel = document.querySelector<HTMLElement>('#player-label')!;
 const bestLabel = document.querySelector<HTMLElement>('#best-label')!;
@@ -357,6 +394,7 @@ void bootstrap();
 window.__dntTouchCol = () => game.getTouchCol();
 window.__dntTouchRow = () => game.getTouchRow();
 window.__dntLastGestureSource = () => getLastGestureSource();
+window.__dntTouchScheme = () => (buttonDas ? 'buttons' : 'gestures');
 
 if (import.meta.env.DEV) {
   window.__dntPreviewCelebration = (kind) => {
