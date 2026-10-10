@@ -3,20 +3,32 @@ import type { GameRunSummary } from './game';
 import { isSupabaseConfigured, supabase } from './supabaseClient';
 
 const LOCAL_HIGH_KEY = 'tetris_local_high';
+/** Remembers each board's rank between visits so we can show a delta. */
+const LOCAL_RANK_KEY = 'tetris_last_ranks';
+
+/** Full board, not a top-8 teaser — the leaderboards page is a real page now. */
+const LEADERBOARD_LIMIT = 100;
+/** Enough runs to plot a trend; the history table paginates client-side. */
+const HISTORY_LIMIT = 200;
 
 export type ScoreStatus = 'local' | 'synced' | 'syncing' | 'offline' | 'error';
 
 export type LeaderboardKind = 'score' | 'lines' | 'time' | 'awards' | 'bestLines';
 
 export interface LeaderboardEntry {
+  userId: string;
   displayName: string;
   value: number;
   /** Formatted for display (score digits, duration, etc.) */
   displayValue: string;
+  /** True for the signed-in player's own row. */
+  isSelf: boolean;
 }
 
 export interface CareerProfile {
+  userId: string;
   displayName: string;
+  joinedAt: string;
   totalLinesCleared: number;
   totalPlayMs: number;
   totalGames: number;
@@ -94,9 +106,11 @@ export function formatEndedAt(iso: string): string {
   }
 }
 
-function emptyCareer(displayName: string): CareerProfile {
+function emptyCareer(displayName: string, userId = ''): CareerProfile {
   return {
+    userId,
     displayName,
+    joinedAt: '',
     totalLinesCleared: 0,
     totalPlayMs: 0,
     totalGames: 0,
@@ -122,6 +136,8 @@ export class ScoreService {
   lastNewAwards: string[] = [];
   /** Most recent Supabase failure, surfaced in the HUD instead of swallowed. */
   lastError: string | null = null;
+  /** Total ranked players on the active board (not just the page shown). */
+  leaderboardTotal = 0;
   private auth: AuthService;
 
   constructor(auth: AuthService) {
@@ -281,20 +297,25 @@ export class ScoreService {
       // The views carry their own ORDER BY, but PostgREST wraps them in an
       // outer query with LIMIT — without an explicit order that returns an
       // arbitrary 8 rows rather than the top 8.
-      const { data, error } = await supabase
+      const selfId = this.auth.user?.id ?? '';
+      const { data, error, count } = await supabase
         .from(meta.view)
-        .select('display_name, value')
+        .select('display_name, value, user_id', { count: 'exact' })
         .order('value', { ascending: false })
-        .limit(8);
+        .limit(LEADERBOARD_LIMIT);
 
       if (error) throw error;
 
+      this.leaderboardTotal = count ?? (data ?? []).length;
       this.leaderboard = (data ?? []).map((row) => {
         const value = Number(row.value) || 0;
+        const userId = String(row.user_id ?? '');
         return {
+          userId,
           displayName: String(row.display_name ?? 'PLAYER').toUpperCase(),
           value,
           displayValue: meta.format(value),
+          isSelf: Boolean(selfId) && userId === selfId,
         };
       });
       this.lastError = null;
@@ -306,6 +327,99 @@ export class ScoreService {
     }
 
     return this.leaderboard;
+  }
+
+  /** 1-based position of the signed-in player on the active board. */
+  myRank(): number | null {
+    const i = this.leaderboard.findIndex((e) => e.isSelf);
+    return i === -1 ? null : i + 1;
+  }
+
+  /**
+   * Change in rank since the last time this board was viewed (positive = moved
+   * up). Reads and then rewrites the stored snapshot, so it is meaningful once
+   * per visit — honest about being "since you last looked", not all-time.
+   */
+  consumeRankDelta(): number | null {
+    const rank = this.myRank();
+    if (rank === null) return null;
+
+    let store: Record<string, number> = {};
+    try {
+      store = JSON.parse(localStorage.getItem(LOCAL_RANK_KEY) ?? '{}') as Record<string, number>;
+    } catch {
+      store = {};
+    }
+
+    const previous = store[this.leaderboardKind];
+    store[this.leaderboardKind] = rank;
+    try {
+      localStorage.setItem(LOCAL_RANK_KEY, JSON.stringify(store));
+    } catch {
+      // Private mode / blocked storage: a missing delta is not worth failing on.
+    }
+
+    if (typeof previous !== 'number' || previous === rank) return null;
+    return previous - rank;
+  }
+
+  /**
+   * Another player's public card. Deliberately excludes game_runs: RLS makes it
+   * owner-only, and per-run timestamps are the thing we promised not to expose.
+   */
+  async loadPublicProfile(
+    userId: string,
+  ): Promise<{ career: CareerProfile; awards: AwardInfo[] } | null> {
+    if (!supabase) return null;
+
+    try {
+      const [profileRes, awardsRes, earnedRes] = await Promise.all([
+        supabase
+          .from('profiles')
+          .select(
+            'id, display_name, created_at, total_lines_cleared, total_play_ms, total_games, awards_count, best_score, best_lines_in_game, best_level_reached, latest_score, latest_lines, latest_level',
+          )
+          .eq('id', userId)
+          .maybeSingle(),
+        supabase.from('awards').select('code, title, description, sort_order').order('sort_order'),
+        supabase.from('user_awards').select('award_code, earned_at').eq('user_id', userId),
+      ]);
+
+      if (profileRes.error) throw profileRes.error;
+      if (!profileRes.data) return null;
+
+      const p = profileRes.data;
+      const career: CareerProfile = {
+        userId: String(p.id),
+        displayName: p.display_name ?? 'PLAYER',
+        joinedAt: String(p.created_at ?? ''),
+        totalLinesCleared: Number(p.total_lines_cleared) || 0,
+        totalPlayMs: Number(p.total_play_ms) || 0,
+        totalGames: Number(p.total_games) || 0,
+        awardsCount: Number(p.awards_count) || 0,
+        bestScore: Number(p.best_score) || 0,
+        bestLinesInGame: Number(p.best_lines_in_game) || 0,
+        bestLevelReached: Number(p.best_level_reached) || 0,
+        latestScore: Number(p.latest_score) || 0,
+        latestLines: Number(p.latest_lines) || 0,
+        latestLevel: Number(p.latest_level) || 0,
+      };
+
+      const earned = new Set((earnedRes.data ?? []).map((r) => r.award_code));
+      const awards: AwardInfo[] = (awardsRes.data ?? []).map((row) => ({
+        code: row.code,
+        title: row.title,
+        description: row.description ?? '',
+        earned: earned.has(row.code),
+        earnedAt: null,
+      }));
+
+      return { career, awards };
+    } catch (err) {
+      this.lastError = describeError(err);
+      console.warn('[scores] public profile failed:', err);
+      return null;
+    }
   }
 
   async loadProfileBundle(): Promise<void> {
@@ -323,7 +437,7 @@ export class ScoreService {
         supabase
           .from('profiles')
           .select(
-            'display_name, total_lines_cleared, total_play_ms, total_games, awards_count, best_score, best_lines_in_game, best_level_reached, latest_score, latest_lines, latest_level',
+            'id, display_name, created_at, total_lines_cleared, total_play_ms, total_games, awards_count, best_score, best_lines_in_game, best_level_reached, latest_score, latest_lines, latest_level',
           )
           .eq('id', uid)
           .maybeSingle(),
@@ -334,7 +448,7 @@ export class ScoreService {
           )
           .eq('user_id', uid)
           .order('ended_at', { ascending: false })
-          .limit(20),
+          .limit(HISTORY_LIMIT),
         supabase.from('awards').select('code, title, description, sort_order').order('sort_order'),
         supabase.from('user_awards').select('award_code, earned_at').eq('user_id', uid),
       ]);
@@ -353,7 +467,9 @@ export class ScoreService {
       if (profileRes.data) {
         const p = profileRes.data;
         this.career = {
+          userId: String(p.id ?? uid),
           displayName: p.display_name ?? this.auth.displayName,
+          joinedAt: String(p.created_at ?? ''),
           totalLinesCleared: Number(p.total_lines_cleared) || 0,
           totalPlayMs: Number(p.total_play_ms) || 0,
           totalGames: Number(p.total_games) || 0,

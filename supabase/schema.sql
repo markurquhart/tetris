@@ -326,7 +326,8 @@ select
   p.display_name,
   s.high_score,
   s.updated_at,
-  s.high_score as value
+  s.high_score as value,
+  p.id as user_id
 from public.scores s
 join public.profiles p on p.id = s.user_id
 where s.high_score > 0
@@ -336,7 +337,8 @@ create or replace view public.leaderboard_career_lines as
 select
   p.display_name,
   p.total_lines_cleared as value,
-  p.updated_at
+  p.updated_at,
+  p.id as user_id
 from public.profiles p
 where p.total_lines_cleared > 0
 order by p.total_lines_cleared desc, p.updated_at asc;
@@ -345,7 +347,8 @@ create or replace view public.leaderboard_play_time as
 select
   p.display_name,
   p.total_play_ms as value,
-  p.updated_at
+  p.updated_at,
+  p.id as user_id
 from public.profiles p
 where p.total_play_ms > 0
 order by p.total_play_ms desc, p.updated_at asc;
@@ -354,7 +357,8 @@ create or replace view public.leaderboard_awards as
 select
   p.display_name,
   p.awards_count as value,
-  p.updated_at
+  p.updated_at,
+  p.id as user_id
 from public.profiles p
 where p.awards_count > 0
 order by p.awards_count desc, p.updated_at asc;
@@ -363,7 +367,8 @@ create or replace view public.leaderboard_best_lines as
 select
   p.display_name,
   p.best_lines_in_game as value,
-  p.updated_at
+  p.updated_at,
+  p.id as user_id
 from public.profiles p
 where p.best_lines_in_game > 0
 order by p.best_lines_in_game desc, p.updated_at asc;

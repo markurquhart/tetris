@@ -6,150 +6,235 @@
       name="viewport"
       content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no"
     />
-    <meta name="theme-color" content="#07090d" />
+    <meta name="theme-color" content="#0b0d12" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="description" content="Def Not Tetris — swipe to play, synced high scores." />
+    <meta name="description" content="Def Not Tetris — play, track your career, climb the boards." />
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Bebas+Neue&family=DM+Sans:wght@500;700&family=Fraunces:wght@600;700&family=IBM+Plex+Mono:wght@400;600&family=Press+Start+2P&family=Space+Grotesk:wght@500;700&family=Syne:wght@700;800&family=Chakra+Petch:wght@500;600;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap"
       rel="stylesheet"
     />
-    <title>DEF NOT TETRIS</title>
+    <title>Def Not Tetris</title>
   </head>
   <body>
-    <div class="shell">
-      <header class="topbar">
-        <div class="brand">
-          <h1>DEF NOT TETRIS</h1>
-          <p id="status-line" class="status-line">Booting…</p>
-        </div>
-        <div class="topbar-meta">
-          <div class="stat">
-            <span>BEST</span>
-            <strong id="best-label">0</strong>
+    <div class="app">
+      <header class="appbar">
+        <a class="brand" href="/play" aria-label="Def Not Tetris home">
+          <span class="brand-mark" aria-hidden="true"></span>
+          <span class="brand-name">Def Not Tetris</span>
+        </a>
+
+        <nav class="mainnav" aria-label="Primary">
+          <a href="/play" data-nav="play">Play</a>
+          <a href="/leaderboards" data-nav="leaderboards">Leaderboards</a>
+          <a href="/profile" data-nav="profile">Profile</a>
+        </nav>
+
+        <div class="account">
+          <button type="button" class="btn btn-primary btn-sm" id="btn-auth-open">Sign in</button>
+          <button type="button" class="avatar-btn" id="btn-account" hidden aria-haspopup="menu" aria-expanded="false">
+            <span class="avatar" id="account-avatar" aria-hidden="true">?</span>
+            <span class="avatar-name" id="account-name">Player</span>
+          </button>
+          <div class="menu" id="account-menu" role="menu" hidden>
+            <a role="menuitem" href="/profile">Your profile</a>
+            <a role="menuitem" href="/settings">Settings</a>
+            <button role="menuitem" type="button" id="btn-signout">Sign out</button>
           </div>
-          <div class="stat">
-            <span>PLAYER</span>
-            <strong id="player-label">GUEST</strong>
-          </div>
-          <button type="button" class="chip-btn" id="btn-auth-open">LOGIN</button>
-          <button type="button" class="chip-btn" id="btn-signout" hidden>OUT</button>
         </div>
       </header>
 
-      <div class="stage">
-        <main class="cabinet" id="app">
-          <section class="screen" aria-label="Game">
-            <div class="crt">
-              <canvas id="game" width="500" height="700" aria-label="Tetris playfield"></canvas>
-              <div class="crt-glass" aria-hidden="true"></div>
-              <div class="crt-scanlines" aria-hidden="true"></div>
-              <div class="crt-vignette" aria-hidden="true"></div>
-              <div id="play-alert" class="play-alert" role="status" aria-live="polite" hidden></div>
-            </div>
-          </section>
-        </main>
+      <p class="banner" id="app-banner" role="status" hidden></p>
 
-        <aside class="side-stack" id="side-stack" aria-label="Scores and account">
-          <div class="rail leaderboard-panel" aria-label="Leaderboards">
-            <div class="panel-title">BOARDS</div>
-            <div class="board-tabs" id="board-tabs" role="tablist" aria-label="Leaderboard type">
-              <button type="button" class="board-tab is-active" data-board="score" role="tab" aria-selected="true">SCORE</button>
-              <button type="button" class="board-tab" data-board="lines" role="tab" aria-selected="false">LINES</button>
-              <button type="button" class="board-tab" data-board="time" role="tab" aria-selected="false">TIME</button>
-              <button type="button" class="board-tab" data-board="awards" role="tab" aria-selected="false">AWARDS</button>
-              <button type="button" class="board-tab" data-board="bestLines" role="tab" aria-selected="false">BEST LN</button>
+      <main class="outlet" id="outlet">
+        <!-- ─────────────────────────── PLAY ─────────────────────────── -->
+        <section class="view view-play" id="view-play" aria-label="Play">
+          <div class="play-grid">
+            <aside class="play-rail play-rail-left">
+              <div class="card stat-card">
+                <span class="card-label">Score</span>
+                <strong class="stat-value" id="hud-score">0</strong>
+              </div>
+              <div class="stat-row">
+                <div class="card stat-card stat-card-sm">
+                  <span class="card-label">Level</span>
+                  <strong class="stat-value" id="hud-level">0</strong>
+                </div>
+                <div class="card stat-card stat-card-sm">
+                  <span class="card-label">Lines</span>
+                  <strong class="stat-value" id="hud-lines">0</strong>
+                </div>
+              </div>
+              <div class="card stat-card stat-card-sm">
+                <span class="card-label">Best</span>
+                <strong class="stat-value muted" id="hud-best">0</strong>
+              </div>
+            </aside>
+
+            <div class="playfield-wrap">
+              <div class="playfield" id="playfield">
+                <canvas id="game" width="320" height="620" aria-label="Tetris playfield"></canvas>
+
+                <div class="overlay" id="overlay-start" hidden>
+                  <h1 class="overlay-title">Def Not Tetris</h1>
+                  <p class="overlay-sub" id="start-greeting">Ready when you are.</p>
+                  <div class="level-picker">
+                    <span class="card-label">Starting level</span>
+                    <div class="stepper">
+                      <button type="button" class="btn btn-ghost" id="btn-level-down" aria-label="Lower starting level">−</button>
+                      <strong id="start-level">0</strong>
+                      <button type="button" class="btn btn-ghost" id="btn-level-up" aria-label="Raise starting level">+</button>
+                    </div>
+                  </div>
+                  <button type="button" class="btn btn-primary btn-lg" id="btn-play">Start game</button>
+                  <p class="overlay-hint">Arrow keys · Z/X rotate · Space drop · C hold</p>
+                </div>
+
+                <div class="overlay" id="overlay-paused" hidden>
+                  <h2 class="overlay-title">Paused</h2>
+                  <button type="button" class="btn btn-primary" id="btn-resume">Resume</button>
+                </div>
+
+                <div class="overlay" id="overlay-gameover" hidden>
+                  <h2 class="overlay-title">Game over</h2>
+                  <div class="final-stats" id="final-stats"></div>
+                  <p class="overlay-sub" id="gameover-note" hidden></p>
+                  <button type="button" class="btn btn-primary btn-lg" id="btn-again">Play again</button>
+                  <a class="btn btn-ghost" href="/profile">View your profile</a>
+                </div>
+
+                <div class="toast" id="play-alert" role="status" aria-live="polite" hidden></div>
+              </div>
+
+              <div class="touch-hint">Drag to move · tap to rotate · flick down to drop · swipe up to hold</div>
             </div>
-            <ol id="leaderboard" class="leaderboard">
-              <li class="empty">Waiting for challengers…</li>
-            </ol>
+
+            <aside class="play-rail play-rail-right">
+              <div class="card">
+                <span class="card-label">Next</span>
+                <div class="preview-stack">
+                  <canvas class="preview preview-lg" id="next-0" width="104" height="72"></canvas>
+                  <canvas class="preview" id="next-1" width="104" height="56"></canvas>
+                  <canvas class="preview" id="next-2" width="104" height="56"></canvas>
+                </div>
+              </div>
+              <div class="card">
+                <span class="card-label">Hold</span>
+                <canvas class="preview preview-lg" id="hold-piece" width="104" height="72"></canvas>
+              </div>
+              <div class="play-actions">
+                <button type="button" class="btn btn-ghost btn-sm" id="btn-pause">Pause</button>
+                <button type="button" class="btn btn-ghost btn-sm" id="btn-restart">Restart</button>
+                <button type="button" class="btn btn-ghost btn-sm" id="btn-mute" aria-pressed="true">Sound on</button>
+              </div>
+            </aside>
+          </div>
+        </section>
+
+        <!-- ────────────────────── LEADERBOARDS ──────────────────────── -->
+        <section class="view" id="view-leaderboards" aria-label="Leaderboards" hidden>
+          <header class="page-head">
+            <h1>Leaderboards</h1>
+            <p class="page-sub" id="board-summary">Every finished game counts.</p>
+          </header>
+
+          <div class="tabs" id="board-tabs" role="tablist" aria-label="Leaderboard type">
+            <a class="tab" role="tab" href="/leaderboards/score" data-board="score">Score</a>
+            <a class="tab" role="tab" href="/leaderboards/lines" data-board="lines">Career lines</a>
+            <a class="tab" role="tab" href="/leaderboards/time" data-board="time">Play time</a>
+            <a class="tab" role="tab" href="/leaderboards/awards" data-board="awards">Awards</a>
+            <a class="tab" role="tab" href="/leaderboards/bestLines" data-board="bestLines">Best game</a>
           </div>
 
-          <div class="rail auth-summary" aria-label="Account">
-            <div class="panel-title">OPERATOR</div>
-            <p id="auth-blurb" class="auth-blurb">
-              Sign in to sync scores, career stats, and game history.
-            </p>
-            <div class="operator-actions">
-              <button type="button" class="dock-btn primary" id="btn-auth-open-side">PLAYER LOGIN</button>
-              <button type="button" class="dock-btn" id="btn-profile-open" hidden>PROFILE</button>
+          <div class="card you-card" id="you-card" hidden>
+            <div class="you-rank">
+              <span class="card-label">Your rank</span>
+              <strong id="you-rank-value">—</strong>
+              <span class="delta" id="you-rank-delta" hidden></span>
+            </div>
+            <div class="you-meta" id="you-meta"></div>
+          </div>
+
+          <ol class="board" id="leaderboard"></ol>
+        </section>
+
+        <!-- ───────────────────────── PROFILE ────────────────────────── -->
+        <section class="view" id="view-profile" aria-label="Profile" hidden>
+          <div id="profile-body"></div>
+        </section>
+
+        <!-- ───────────────── PUBLIC PLAYER PROFILE ──────────────────── -->
+        <section class="view" id="view-player" aria-label="Player profile" hidden>
+          <div id="player-body"></div>
+        </section>
+
+        <!-- ──────────────────────── SETTINGS ────────────────────────── -->
+        <section class="view" id="view-settings" aria-label="Settings" hidden>
+          <header class="page-head">
+            <h1>Settings</h1>
+            <p class="page-sub">Account and gameplay preferences.</p>
+          </header>
+
+          <div class="card settings-card" id="settings-account">
+            <h2 class="card-title">Account</h2>
+            <label class="field">
+              Display name
+              <span class="field-row">
+                <input id="profile-name" maxlength="24" autocomplete="nickname" placeholder="Your name" />
+                <button type="button" class="btn btn-primary" id="btn-profile-save-name">Save</button>
+              </span>
+            </label>
+            <p id="profile-name-msg" class="field-msg" role="status" hidden></p>
+            <div class="settings-actions">
+              <button type="button" class="btn btn-ghost" id="btn-change-password">Change password</button>
+              <button type="button" class="btn btn-ghost btn-danger" id="btn-signout-settings">Sign out</button>
             </div>
           </div>
-        </aside>
-      </div>
 
-      <footer class="dock">
-        <p class="gesture-legend">
-          <span>drag ←→ follow</span>
-          <span>drag ↓ soft</span>
-          <span>flick↓ drop</span>
-          <span>tap rotate</span>
-          <span>↑ / hold</span>
-        </p>
-        <div class="dock-actions">
-          <button type="button" class="dock-btn primary" id="btn-play">START</button>
-          <button type="button" class="dock-btn" id="btn-level-down">LVL−</button>
-          <button type="button" class="dock-btn" id="btn-level-up">LVL+</button>
-          <button type="button" class="dock-btn" id="btn-pause">PAUSE</button>
-          <button type="button" class="dock-btn" id="btn-restart">RESET</button>
-          <button type="button" class="dock-btn" id="btn-mute">SND</button>
-          <button type="button" class="dock-btn ghost" id="btn-scores-toggle">SCORES</button>
-        </div>
-        <p class="desktop-hint">Keyboard: arrows · X/Z rotate · Space drop · C hold</p>
-      </footer>
+          <div class="card settings-card">
+            <h2 class="card-title">Gameplay</h2>
+            <div class="setting-row">
+              <div>
+                <strong>Sound effects</strong>
+                <p class="setting-hint">Movement, clears and celebrations.</p>
+              </div>
+              <button type="button" class="btn btn-ghost" id="btn-sound-toggle" aria-pressed="true">On</button>
+            </div>
+          </div>
+
+          <p class="signed-out-note" id="settings-signed-out" hidden>
+            <a href="/profile">Sign in</a> to change your display name or password.
+          </p>
+        </section>
+      </main>
+
+      <nav class="tabbar" aria-label="Primary mobile">
+        <a href="/play" data-nav="play"><span class="tabbar-ico" aria-hidden="true">▦</span>Play</a>
+        <a href="/leaderboards" data-nav="leaderboards"><span class="tabbar-ico" aria-hidden="true">≡</span>Boards</a>
+        <a href="/profile" data-nav="profile"><span class="tabbar-ico" aria-hidden="true">◍</span>Profile</a>
+        <a href="/settings" data-nav="settings"><span class="tabbar-ico" aria-hidden="true">⚙</span>Settings</a>
+      </nav>
     </div>
 
-    <dialog id="profile-modal" class="auth-modal">
-      <div class="auth-card profile-card">
-        <div class="auth-marquee">PROFILE</div>
-        <p id="profile-subtitle" class="auth-hint">Career stats &amp; history</p>
+    <dialog id="auth-modal" class="modal">
+      <form method="dialog" id="auth-form" class="modal-card">
+        <h2 class="modal-title">Sign in</h2>
+        <p class="modal-sub">Your career, awards and every finished game sync across devices.</p>
 
-        <label class="profile-name-field">
+        <label class="field">
           Display name
-          <span class="profile-name-row">
-            <input id="profile-name" maxlength="24" autocomplete="nickname" placeholder="ACE" />
-            <button type="button" class="dock-btn" id="btn-profile-save-name">SAVE</button>
-          </span>
+          <input id="auth-name" name="displayName" maxlength="24" autocomplete="nickname" placeholder="Your name" />
         </label>
-        <p id="profile-name-msg" class="auth-error" role="status" hidden></p>
-
-        <div class="profile-stats" id="profile-stats" aria-label="Career stats"></div>
-
-        <div class="profile-latest" id="profile-latest" aria-label="Most recent game"></div>
-
-        <div class="panel-title profile-section-title">AWARDS</div>
-        <ul id="profile-awards" class="award-list"></ul>
-
-        <div class="panel-title profile-section-title">RECENT GAMES</div>
-        <p class="profile-privacy-note">Timestamps visible to you only.</p>
-        <ol id="profile-history" class="history-list"></ol>
-
-        <div class="auth-actions">
-          <button type="button" class="dock-btn" id="btn-change-password">CHANGE PASSWORD</button>
-          <button type="button" class="dock-btn ghost" id="btn-profile-close">CLOSE</button>
-        </div>
-      </div>
-    </dialog>
-
-    <dialog id="auth-modal" class="auth-modal">
-      <form method="dialog" id="auth-form" class="auth-card">
-        <div class="auth-marquee">PLAYER LOGIN</div>
-        <p class="auth-hint">Email + password · career &amp; scores sync to your account</p>
-
-        <label>
-          Display name
-          <input id="auth-name" name="displayName" maxlength="24" autocomplete="nickname" placeholder="ACE" />
-        </label>
-        <label>
+        <label class="field">
           Email
           <input id="auth-email" name="email" type="email" required autocomplete="email" placeholder="you@email.com" />
         </label>
-        <label>
+        <label class="field">
           Password
           <input
             id="auth-password"
@@ -162,53 +247,39 @@
           />
         </label>
 
-        <p id="auth-error" class="auth-error" role="alert" hidden></p>
-        <p id="auth-notice" class="auth-notice" role="status" hidden></p>
+        <p id="auth-error" class="field-msg is-error" role="alert" hidden></p>
+        <p id="auth-notice" class="field-msg is-ok" role="status" hidden></p>
 
-        <div class="auth-actions">
-          <button type="submit" class="dock-btn primary" id="btn-signin" value="signin">SIGN IN</button>
-          <button type="submit" class="dock-btn" id="btn-signup" value="signup">CREATE</button>
-          <button type="button" class="dock-btn ghost" id="btn-auth-close">CLOSE</button>
+        <div class="modal-actions">
+          <button type="submit" class="btn btn-primary" id="btn-signin" value="signin">Sign in</button>
+          <button type="submit" class="btn btn-ghost" id="btn-signup" value="signup">Create account</button>
         </div>
-        <button type="button" class="link-btn" id="btn-forgot">Forgot your password?</button>
+        <div class="modal-foot">
+          <button type="button" class="link-btn" id="btn-forgot">Forgot your password?</button>
+          <button type="button" class="link-btn" id="btn-auth-close">Close</button>
+        </div>
       </form>
     </dialog>
 
-    <dialog id="password-modal" class="auth-modal">
-      <form method="dialog" id="password-form" class="auth-card">
-        <div class="auth-marquee">NEW PASSWORD</div>
-        <p class="auth-hint">Choose a new password for your account.</p>
+    <dialog id="password-modal" class="modal">
+      <form method="dialog" id="password-form" class="modal-card">
+        <h2 class="modal-title">New password</h2>
+        <p class="modal-sub" id="password-hint">Choose a new password for your account.</p>
 
-        <label>
+        <label class="field">
           New password
-          <input
-            id="password-new"
-            name="newPassword"
-            type="password"
-            required
-            minlength="6"
-            autocomplete="new-password"
-            placeholder="••••••••"
-          />
+          <input id="password-new" name="newPassword" type="password" required minlength="6" autocomplete="new-password" placeholder="••••••••" />
         </label>
-        <label>
+        <label class="field">
           Confirm password
-          <input
-            id="password-confirm"
-            name="confirmPassword"
-            type="password"
-            required
-            minlength="6"
-            autocomplete="new-password"
-            placeholder="••••••••"
-          />
+          <input id="password-confirm" name="confirmPassword" type="password" required minlength="6" autocomplete="new-password" placeholder="••••••••" />
         </label>
 
-        <p id="password-error" class="auth-error" role="alert" hidden></p>
+        <p id="password-error" class="field-msg is-error" role="alert" hidden></p>
 
-        <div class="auth-actions">
-          <button type="submit" class="dock-btn primary" id="btn-password-save">SAVE</button>
-          <button type="button" class="dock-btn ghost" id="btn-password-close">CANCEL</button>
+        <div class="modal-actions">
+          <button type="submit" class="btn btn-primary" id="btn-password-save">Save password</button>
+          <button type="button" class="btn btn-ghost" id="btn-password-close">Cancel</button>
         </div>
       </form>
     </dialog>

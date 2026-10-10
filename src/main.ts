@@ -1,46 +1,38 @@
 import './style.css';
-import './ui-themes.css';
 import { AuthService } from './auth';
+import { avatarHue, initialsOf } from './charts';
 import {
   FPS,
   MAX_CATCH_UP_FRAMES,
+  PIECE_COLORS,
   STATE_GAME_OVER,
   STATE_PAUSED,
+  STATE_PLAYING,
   STATE_START,
   WINDOW_HEIGHT,
   WINDOW_WIDTH,
 } from './constants';
 import { Game } from './game';
-import {
-  bindPlayfieldGestures,
-  getLastGestureSource,
-  preventMobilePageZoom,
-} from './gestures';
+import { bindPlayfieldGestures, preventMobilePageZoom } from './gestures';
 import { InputHandler } from './input';
-import { Renderer } from './renderer';
-import {
-  formatEndedAt,
-  formatPlayTime,
-  ScoreService,
-  type LeaderboardKind,
-} from './scores';
+import { drawPiecePreview, Renderer } from './renderer';
+import { Router } from './router';
+import { formatPlayTime, ScoreService, type LeaderboardKind } from './scores';
 import { SoundManager } from './sound';
-import { applyUiTheme } from './ui';
+import {
+  renderMissingPlayer,
+  renderProfile,
+  renderSignedOut,
+} from './views/profile';
 
 preventMobilePageZoom();
-applyUiTheme();
 
-declare global {
-  interface Window {
-    __dntPreviewCelebration?: (kind: 'tetris' | 'perfect' | 'tetris_perfect') => void;
-    __dntTouchCol?: () => number | null;
-    __dntTouchRow?: () => number | null;
-    __dntLastGestureSource?: () => string | null;
-  }
-}
+const $ = <T extends HTMLElement>(sel: string): T =>
+  document.querySelector<T>(sel)!;
 
-const canvas = document.querySelector<HTMLCanvasElement>('#game')!;
-// alpha:false + desynchronized lowers compositing latency on supporting browsers.
+// ── Services ──────────────────────────────────────────────────────────────
+
+const canvas = $<HTMLCanvasElement>('#game');
 const ctx =
   canvas.getContext('2d', { alpha: false, desynchronized: true }) ??
   canvas.getContext('2d')!;
@@ -53,105 +45,495 @@ const renderer = new Renderer(ctx);
 const auth = new AuthService();
 const scores = new ScoreService(auth);
 const game = new Game(sound);
+const router = new Router();
 
-const crt = document.querySelector<HTMLElement>('.crt')!;
-const playAlert = document.querySelector<HTMLElement>('#play-alert')!;
+// ── Elements ──────────────────────────────────────────────────────────────
 
-let lastGameOverHandled = false;
-let lineClearProgress: number | null = null;
-let paintQueued = false;
-let lastCelebrationKind: string | null = null;
-let hudStatusFallback = '';
+const outletEl = $('#outlet');
+const bannerEl = $('#app-banner');
 
-function celebrationCopy(kind: NonNullable<typeof game.celebration>['kind']): {
-  status: string;
-  toast: string;
-} {
-  if (kind === 'tetris_perfect') {
-    return { status: 'PERFECT TETRIS — BOARD WIPED!', toast: 'PERFECT TETRIS' };
-  }
-  if (kind === 'perfect') {
-    return { status: 'ALL CLEAR — EMPTY BOARD!', toast: 'ALL CLEAR' };
-  }
-  return { status: 'TETRIS!', toast: 'TETRIS!' };
+const views: Record<string, HTMLElement> = {
+  play: $('#view-play'),
+  leaderboards: $('#view-leaderboards'),
+  profile: $('#view-profile'),
+  player: $('#view-player'),
+  settings: $('#view-settings'),
+};
+
+const playfield = $('#playfield');
+const overlayStart = $('#overlay-start');
+const overlayPaused = $('#overlay-paused');
+const overlayGameOver = $('#overlay-gameover');
+const playAlert = $('#play-alert');
+const startGreeting = $('#start-greeting');
+const startLevelEl = $('#start-level');
+const finalStats = $('#final-stats');
+const gameOverNote = $('#gameover-note');
+
+const hudScore = $('#hud-score');
+const hudLevel = $('#hud-level');
+const hudLines = $('#hud-lines');
+const hudBest = $('#hud-best');
+
+const nextCanvases = [
+  $<HTMLCanvasElement>('#next-0'),
+  $<HTMLCanvasElement>('#next-1'),
+  $<HTMLCanvasElement>('#next-2'),
+];
+const holdCanvas = $<HTMLCanvasElement>('#hold-piece');
+
+const btnAuthOpen = $<HTMLButtonElement>('#btn-auth-open');
+const btnAccount = $<HTMLButtonElement>('#btn-account');
+const accountMenu = $('#account-menu');
+const accountAvatar = $('#account-avatar');
+const accountName = $('#account-name');
+
+const authModal = $<HTMLDialogElement>('#auth-modal');
+const authForm = $<HTMLFormElement>('#auth-form');
+const authError = $('#auth-error');
+const authNotice = $('#auth-notice');
+const authName = $<HTMLInputElement>('#auth-name');
+const authEmail = $<HTMLInputElement>('#auth-email');
+const authPassword = $<HTMLInputElement>('#auth-password');
+const btnForgot = $<HTMLButtonElement>('#btn-forgot');
+
+const passwordModal = $<HTMLDialogElement>('#password-modal');
+const passwordForm = $<HTMLFormElement>('#password-form');
+const passwordNew = $<HTMLInputElement>('#password-new');
+const passwordConfirm = $<HTMLInputElement>('#password-confirm');
+const passwordError = $('#password-error');
+const passwordHint = $('#password-hint');
+const btnPasswordCancel = $<HTMLButtonElement>('#btn-password-close');
+
+const boardTabs = $('#board-tabs');
+const boardSummary = $('#board-summary');
+const leaderboardEl = $<HTMLOListElement>('#leaderboard');
+const youCard = $('#you-card');
+const youRankValue = $('#you-rank-value');
+const youRankDelta = $('#you-rank-delta');
+const youMeta = $('#you-meta');
+
+const profileBody = $('#profile-body');
+const playerBody = $('#player-body');
+const profileName = $<HTMLInputElement>('#profile-name');
+const profileNameMsg = $('#profile-name-msg');
+const settingsAccount = $('#settings-account');
+const settingsSignedOut = $('#settings-signed-out');
+const btnSoundToggle = $<HTMLButtonElement>('#btn-sound-toggle');
+const btnMute = $<HTMLButtonElement>('#btn-mute');
+
+// ── Routing ───────────────────────────────────────────────────────────────
+
+router
+  .add('play', '/play')
+  .add('leaderboards', '/leaderboards')
+  .add('leaderboardsBoard', '/leaderboards/:board')
+  .add('profile', '/profile')
+  .add('player', '/u/:id')
+  .add('settings', '/settings')
+  .add('root', '/')
+  .setFallback('/play');
+
+const VALID_BOARDS: LeaderboardKind[] = ['score', 'lines', 'time', 'awards', 'bestLines'];
+
+function showView(name: keyof typeof views): void {
+  for (const [key, el] of Object.entries(views)) el.hidden = key !== name;
+  outletEl.scrollTop = 0;
+  window.scrollTo(0, 0);
 }
 
-function syncCelebrationAlert(): void {
+function markNav(active: string): void {
+  for (const link of document.querySelectorAll<HTMLAnchorElement>('[data-nav]')) {
+    link.classList.toggle('is-active', link.dataset.nav === active);
+    if (link.dataset.nav === active) link.setAttribute('aria-current', 'page');
+    else link.removeAttribute('aria-current');
+  }
+}
+
+router.onChange((match) => {
+  closeAccountMenu();
+
+  if (match.name === 'root') {
+    router.navigate('/play', { replace: true });
+    return;
+  }
+
+  // Leaving the game mid-run shouldn't keep gravity ticking out of sight.
+  if (match.name !== 'play' && game.state === STATE_PLAYING) {
+    game.state = STATE_PAUSED;
+    syncOverlays();
+  }
+
+  switch (match.name) {
+    case 'play':
+      showView('play');
+      markNav('play');
+      document.title = 'Play · Def Not Tetris';
+      break;
+
+    case 'leaderboards':
+      router.navigate(`/leaderboards/${scores.leaderboardKind}`, { replace: true });
+      return;
+
+    case 'leaderboardsBoard': {
+      const board = match.params.board as LeaderboardKind;
+      if (!VALID_BOARDS.includes(board)) {
+        router.navigate('/leaderboards/score', { replace: true });
+        return;
+      }
+      showView('leaderboards');
+      markNav('leaderboards');
+      document.title = 'Leaderboards · Def Not Tetris';
+      void openBoard(board);
+      break;
+    }
+
+    case 'profile':
+      showView('profile');
+      markNav('profile');
+      document.title = 'Profile · Def Not Tetris';
+      void openOwnProfile();
+      break;
+
+    case 'player':
+      showView('player');
+      markNav('');
+      document.title = 'Player · Def Not Tetris';
+      void openPlayerProfile(match.params.id);
+      break;
+
+    case 'settings':
+      showView('settings');
+      markNav('settings');
+      document.title = 'Settings · Def Not Tetris';
+      syncSettings();
+      break;
+  }
+});
+
+// ── Leaderboards ──────────────────────────────────────────────────────────
+
+const BOARD_COPY: Record<LeaderboardKind, string> = {
+  score: 'Highest single-game score.',
+  lines: 'Total lines cleared across every game.',
+  time: 'Total time spent playing.',
+  awards: 'Awards earned.',
+  bestLines: 'Most lines cleared in one game.',
+};
+
+async function openBoard(kind: LeaderboardKind): Promise<void> {
+  for (const tab of boardTabs.querySelectorAll<HTMLAnchorElement>('[data-board]')) {
+    const on = tab.dataset.board === kind;
+    tab.classList.toggle('is-active', on);
+    tab.setAttribute('aria-selected', on ? 'true' : 'false');
+  }
+
+  boardSummary.textContent = BOARD_COPY[kind];
+  if (scores.leaderboardKind !== kind || !scores.leaderboard.length) {
+    await scores.setLeaderboardKind(kind);
+  }
+  renderLeaderboard();
+}
+
+function renderLeaderboard(): void {
+  leaderboardEl.replaceChildren();
+
+  if (!scores.leaderboard.length) {
+    const li = document.createElement('li');
+    li.className = 'empty';
+    li.textContent = scores.lastError
+      ? `Board unavailable — ${scores.lastError}`
+      : 'No ranked players yet. Finish a game to claim the top spot.';
+    leaderboardEl.append(li);
+    youCard.hidden = true;
+    return;
+  }
+
+  scores.leaderboard.forEach((entry, i) => {
+    const li = document.createElement('li');
+    li.classList.toggle('is-self', entry.isSelf);
+
+    const rank = document.createElement('span');
+    rank.className = 'rank';
+    rank.textContent = String(i + 1).padStart(2, '0');
+
+    const avatar = document.createElement('span');
+    avatar.className = 'avatar';
+    avatar.style.setProperty('--avatar-hue', String(avatarHue(entry.userId || entry.displayName)));
+    avatar.textContent = initialsOf(entry.displayName);
+
+    const name = document.createElement(entry.userId ? 'a' : 'span');
+    name.className = 'name';
+    name.textContent = entry.displayName;
+    if (entry.userId && name instanceof HTMLAnchorElement) {
+      name.href = entry.isSelf ? '/profile' : `/u/${entry.userId}`;
+    }
+    if (entry.isSelf) {
+      const tag = document.createElement('span');
+      tag.className = 'you-tag';
+      tag.textContent = 'You';
+      name.append(tag);
+    }
+
+    const pts = document.createElement('span');
+    pts.className = 'pts';
+    pts.textContent = entry.displayValue;
+
+    li.append(rank, avatar, name, pts);
+    leaderboardEl.append(li);
+  });
+
+  const rank = scores.myRank();
+  if (rank === null) {
+    youCard.hidden = true;
+    return;
+  }
+
+  youCard.hidden = false;
+  youRankValue.textContent = `#${rank}`;
+  youMeta.textContent = `of ${scores.leaderboardTotal} ranked ${
+    scores.leaderboardTotal === 1 ? 'player' : 'players'
+  }`;
+
+  const delta = scores.consumeRankDelta();
+  youRankDelta.hidden = delta === null;
+  if (delta !== null) {
+    const up = delta > 0;
+    youRankDelta.className = `delta ${up ? 'is-up' : 'is-down'}`;
+    youRankDelta.textContent = `${up ? '▲' : '▼'}${Math.abs(delta)} since your last visit`;
+  }
+}
+
+// ── Profile ───────────────────────────────────────────────────────────────
+
+function rankLine(): string | null {
+  const rank = scores.myRank();
+  if (rank === null) return null;
+  return `#${rank} of ${scores.leaderboardTotal} by ${scores.leaderboardKind === 'score' ? 'score' : scores.leaderboardKind}`;
+}
+
+async function openOwnProfile(): Promise<void> {
+  if (!auth.isSignedIn()) {
+    renderSignedOut(profileBody, openAuth);
+    return;
+  }
+
+  if (!scores.career) await scores.loadProfileBundle();
+  const career = scores.career;
+  if (!career) {
+    renderSignedOut(profileBody, openAuth);
+    return;
+  }
+
+  renderProfile(profileBody, {
+    career,
+    awards: scores.awards,
+    history: scores.history,
+    isSelf: true,
+    rankLine: rankLine(),
+  });
+}
+
+async function openPlayerProfile(userId: string): Promise<void> {
+  playerBody.replaceChildren();
+  const loading = document.createElement('div');
+  loading.className = 'empty-state';
+  loading.textContent = 'Loading player…';
+  playerBody.append(loading);
+
+  if (auth.user?.id === userId) {
+    router.navigate('/profile', { replace: true });
+    return;
+  }
+
+  const data = await scores.loadPublicProfile(userId);
+  if (!data) {
+    renderMissingPlayer(playerBody);
+    return;
+  }
+
+  document.title = `${data.career.displayName} · Def Not Tetris`;
+  renderProfile(playerBody, {
+    career: data.career,
+    awards: data.awards,
+    history: [],
+    isSelf: false,
+  });
+}
+
+// ── Settings ──────────────────────────────────────────────────────────────
+
+function syncSettings(): void {
+  const signedIn = auth.isSignedIn();
+  settingsAccount.hidden = !signedIn;
+  settingsSignedOut.hidden = signedIn;
+  profileName.value = auth.displayName === 'PLAYER' ? '' : auth.displayName;
+  syncSoundButtons();
+}
+
+function syncSoundButtons(): void {
+  const on = sound.isEnabled();
+  btnSoundToggle.textContent = on ? 'On' : 'Off';
+  btnSoundToggle.setAttribute('aria-pressed', String(on));
+  btnMute.textContent = on ? 'Sound on' : 'Sound off';
+  btnMute.setAttribute('aria-pressed', String(on));
+}
+
+// ── Account chrome ────────────────────────────────────────────────────────
+
+function refreshAccount(): void {
+  const signedIn = auth.isSignedIn();
+  btnAuthOpen.hidden = signedIn;
+  btnAccount.hidden = !signedIn;
+
+  if (signedIn) {
+    accountName.textContent = auth.displayName;
+    accountAvatar.textContent = initialsOf(auth.displayName);
+    accountAvatar.style.setProperty(
+      '--avatar-hue',
+      String(avatarHue(auth.user?.id ?? auth.displayName)),
+    );
+  }
+
+  hudBest.textContent = scores.highScore.toLocaleString();
+  game.setHighScore(scores.highScore);
+
+  bannerEl.hidden = !scores.lastError;
+  if (scores.lastError) bannerEl.textContent = `Database error — ${scores.lastError}`;
+
+  startGreeting.textContent = signedIn
+    ? `Signed in as ${auth.displayName}. Every finished game is saved.`
+    : 'Playing as a guest — sign in to save your career.';
+}
+
+function closeAccountMenu(): void {
+  accountMenu.hidden = true;
+  btnAccount.setAttribute('aria-expanded', 'false');
+}
+
+btnAccount.addEventListener('click', (e) => {
+  e.stopPropagation();
+  const open = accountMenu.hidden;
+  accountMenu.hidden = !open;
+  btnAccount.setAttribute('aria-expanded', String(open));
+});
+
+document.addEventListener('click', (e) => {
+  if (accountMenu.hidden) return;
+  if (accountMenu.contains(e.target as Node)) return;
+  closeAccountMenu();
+});
+
+// ── Game HUD (DOM, not canvas) ────────────────────────────────────────────
+
+let lastHudKey = '';
+let lastPreviewKey = '';
+
+function syncHud(): void {
+  const key = `${game.score}|${game.level}|${game.linesCleared}`;
+  if (key !== lastHudKey) {
+    lastHudKey = key;
+    hudScore.textContent = game.score.toLocaleString();
+    hudLevel.textContent = String(game.level);
+    hudLines.textContent = String(game.linesCleared);
+  }
+
+  const previewKey = `${game.nextPieces.join(',')}|${game.holdPieceType}|${game.holdAvailable}`;
+  if (previewKey !== lastPreviewKey) {
+    lastPreviewKey = previewKey;
+    nextCanvases.forEach((c, i) => {
+      const type = game.nextPieces[i];
+      drawPiecePreview(c, type ?? null, type !== undefined ? PIECE_COLORS[type] : null);
+    });
+    drawPiecePreview(
+      holdCanvas,
+      game.holdPieceType,
+      game.holdPieceType !== null ? PIECE_COLORS[game.holdPieceType] : null,
+      !game.holdAvailable,
+    );
+  }
+}
+
+let lastState = '';
+
+function syncOverlays(): void {
+  if (game.state === lastState) return;
+  lastState = game.state;
+
+  document.body.classList.toggle('is-playing', game.state === STATE_PLAYING);
+  overlayStart.hidden = game.state !== STATE_START;
+  overlayPaused.hidden = game.state !== STATE_PAUSED;
+  overlayGameOver.hidden = game.state !== STATE_GAME_OVER;
+
+  if (game.state === STATE_START) startLevelEl.textContent = String(game.selectedLevel);
+
+  if (game.state === STATE_GAME_OVER) {
+    finalStats.replaceChildren();
+    const items: Array<[string, string]> = [
+      ['Score', game.score.toLocaleString()],
+      ['Lines', String(game.linesCleared)],
+      ['Level', String(game.level)],
+    ];
+    for (const [label, value] of items) {
+      const cell = document.createElement('div');
+      cell.className = 'final-stat';
+      const strong = document.createElement('strong');
+      strong.textContent = value;
+      const span = document.createElement('span');
+      span.textContent = label;
+      cell.append(strong, span);
+      finalStats.append(cell);
+    }
+    gameOverNote.hidden = !game.isNewHighScore;
+    if (game.isNewHighScore) gameOverNote.textContent = 'New personal best!';
+  }
+}
+
+let lastCelebrationKind: string | null = null;
+
+function syncCelebration(): void {
   const cele = game.celebration;
   if (!cele) {
     if (lastCelebrationKind !== null) {
       lastCelebrationKind = null;
-      statusLine.classList.remove('is-alert', 'alert-tetris', 'alert-perfect', 'alert-tetris_perfect');
-      statusLine.textContent = hudStatusFallback || statusLine.textContent;
       playAlert.hidden = true;
-      playAlert.classList.remove('is-on', 'kind-tetris', 'kind-perfect', 'kind-tetris_perfect');
-      crt.classList.remove('is-celebrate', 'is-celebrate-perfect');
+      playAlert.className = 'toast';
     }
     return;
   }
+  if (lastCelebrationKind === cele.kind) return;
 
-  const copy = celebrationCopy(cele.kind);
-  if (lastCelebrationKind !== cele.kind) {
-    lastCelebrationKind = cele.kind;
-    statusLine.classList.remove('alert-tetris', 'alert-perfect', 'alert-tetris_perfect');
-    statusLine.classList.add('is-alert', `alert-${cele.kind}`);
-    statusLine.textContent = copy.status;
-
-    playAlert.hidden = false;
-    playAlert.textContent = copy.toast;
-    playAlert.classList.remove('kind-tetris', 'kind-perfect', 'kind-tetris_perfect');
-    playAlert.classList.add('is-on', `kind-${cele.kind}`);
-
-    crt.classList.remove('is-celebrate', 'is-celebrate-perfect');
-    // Retrigger CSS animation
-    void crt.offsetWidth;
-    crt.classList.add(
-      cele.kind === 'tetris' ? 'is-celebrate' : 'is-celebrate-perfect',
-    );
-  }
+  lastCelebrationKind = cele.kind;
+  playAlert.hidden = false;
+  playAlert.textContent =
+    cele.kind === 'tetris_perfect'
+      ? 'Perfect Tetris'
+      : cele.kind === 'perfect'
+        ? 'All clear'
+        : 'Tetris';
+  playAlert.className = `toast is-on kind-${cele.kind}`;
 }
+
+let lineClearProgress: number | null = null;
+let paintQueued = false;
 
 function paint(): void {
-  if (game.state === STATE_START) {
-    renderer.drawStartScreen(
-      game.selectedLevel,
-      auth.displayName.toUpperCase(),
-      auth.isSignedIn() ? 'CLOUD SAVE ON' : 'GUEST PLAY',
-    );
-  } else {
-    renderer.clear();
-    renderer.drawBoardBackground();
-    renderer.drawBoard(game.board, lineClearProgress ?? 0);
-    if (game.state === 'playing' && game.currentPiece) {
-      const ghostRow = game.getGhostRow();
-      if (ghostRow !== null && ghostRow > game.currentPiece.row) {
-        renderer.drawGhost(game.currentPiece, ghostRow);
-      }
-    }
-    renderer.drawPiece(game.currentPiece);
-    renderer.drawHud(
-      game.nextPieces,
-      game.holdPieceType,
-      game.holdAvailable,
-      game.score,
-      game.highScore,
-      game.level,
-      game.linesCleared,
-    );
-    if (game.celebration) renderer.drawCelebration(game.celebration);
-    if (game.state === STATE_PAUSED) renderer.drawPauseOverlay();
-    if (game.state === STATE_GAME_OVER) {
-      renderer.drawGameOverOverlay(game.score, game.highScore, game.isNewHighScore);
+  renderer.drawBoardBackground();
+  renderer.drawBoard(game.board, lineClearProgress ?? 0);
+  if (game.state === STATE_PLAYING && game.currentPiece) {
+    const ghostRow = game.getGhostRow();
+    if (ghostRow !== null && ghostRow > game.currentPiece.row) {
+      renderer.drawGhost(game.currentPiece, ghostRow);
     }
   }
-  renderer.drawSoundIndicator(sound.isEnabled());
-  syncCelebrationAlert();
+  renderer.drawPiece(game.currentPiece);
+
+  syncHud();
+  syncOverlays();
+  syncCelebration();
 }
 
-/**
- * Touch paint: microtask coalesce (faster than waiting on rAF when the
- * sim loop is hitching). Same-tick multi-step moves still paint once.
- */
+/** Touch paint: microtask coalesce beats waiting on rAF when the sim hitches. */
 function schedulePaint(): void {
   if (paintQueued) return;
   paintQueued = true;
@@ -161,231 +543,75 @@ function schedulePaint(): void {
   });
 }
 
+// ── Gestures & controls ───────────────────────────────────────────────────
+
 bindPlayfieldGestures(
-  crt,
+  playfield,
   input,
   {
-    unlock: () => {
-      void sound.unlock();
-    },
+    unlock: () => void sound.unlock(),
     paint: schedulePaint,
     getCol: () => game.getTouchCol(),
     getRow: () => game.getTouchRow(),
     getPieceEpoch: () => game.pieceEpoch,
     seekCol: (col) => game.touchSeekCol(col),
     seekRow: (row) => game.touchSeekRow(row),
-    rotate: () => {
-      game.touchRotate();
-    },
-    hardDrop: () => {
-      game.touchHardDrop();
-    },
-    hold: () => {
-      game.touchHold();
-    },
-    start: () => {
-      game.touchStartFromTitle();
-    },
+    rotate: () => game.touchRotate(),
+    hardDrop: () => game.touchHardDrop(),
+    hold: () => game.touchHold(),
+    start: () => game.touchStartFromTitle(),
   },
   () => game.state === STATE_START,
 );
 
-const playerLabel = document.querySelector<HTMLElement>('#player-label')!;
-const bestLabel = document.querySelector<HTMLElement>('#best-label')!;
-const statusLine = document.querySelector<HTMLElement>('#status-line')!;
-const authBlurb = document.querySelector<HTMLElement>('#auth-blurb')!;
-const leaderboardEl = document.querySelector<HTMLOListElement>('#leaderboard')!;
-const boardTabs = document.querySelector<HTMLElement>('#board-tabs')!;
-const authModal = document.querySelector<HTMLDialogElement>('#auth-modal')!;
-const authForm = document.querySelector<HTMLFormElement>('#auth-form')!;
-const authError = document.querySelector<HTMLElement>('#auth-error')!;
-const authNotice = document.querySelector<HTMLElement>('#auth-notice')!;
-const btnForgot = document.querySelector<HTMLButtonElement>('#btn-forgot')!;
-const passwordModal = document.querySelector<HTMLDialogElement>('#password-modal')!;
-const passwordForm = document.querySelector<HTMLFormElement>('#password-form')!;
-const passwordNew = document.querySelector<HTMLInputElement>('#password-new')!;
-const passwordConfirm = document.querySelector<HTMLInputElement>('#password-confirm')!;
-const passwordError = document.querySelector<HTMLElement>('#password-error')!;
-const authName = document.querySelector<HTMLInputElement>('#auth-name')!;
-const authEmail = document.querySelector<HTMLInputElement>('#auth-email')!;
-const authPassword = document.querySelector<HTMLInputElement>('#auth-password')!;
-const btnSignOut = document.querySelector<HTMLButtonElement>('#btn-signout')!;
-const btnAuthOpen = document.querySelector<HTMLButtonElement>('#btn-auth-open')!;
-const btnAuthOpenSide = document.querySelector<HTMLButtonElement>('#btn-auth-open-side')!;
-const btnProfileOpen = document.querySelector<HTMLButtonElement>('#btn-profile-open')!;
-const profileModal = document.querySelector<HTMLDialogElement>('#profile-modal')!;
-const profileName = document.querySelector<HTMLInputElement>('#profile-name')!;
-const profileNameMsg = document.querySelector<HTMLElement>('#profile-name-msg')!;
-const profileStats = document.querySelector<HTMLElement>('#profile-stats')!;
-const profileLatest = document.querySelector<HTMLElement>('#profile-latest')!;
-const profileAwards = document.querySelector<HTMLUListElement>('#profile-awards')!;
-const profileHistory = document.querySelector<HTMLOListElement>('#profile-history')!;
-
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-
-function renderLeaderboard(): void {
-  if (!scores.leaderboard.length) {
-    leaderboardEl.innerHTML = scores.lastError
-      ? `<li class="empty">Board unavailable — ${escapeHtml(scores.lastError)}</li>`
-      : '<li class="empty">Waiting for challengers…</li>';
-    return;
-  }
-
-  leaderboardEl.innerHTML = scores.leaderboard
-    .map(
-      (entry, i) => `
-      <li>
-        <span class="rank">${String(i + 1).padStart(2, '0')}</span>
-        <span class="name">${escapeHtml(entry.displayName)}</span>
-        <span class="pts">${escapeHtml(entry.displayValue)}</span>
-      </li>`,
-    )
-    .join('');
-}
-
-function renderProfilePanel(): void {
-  const career = scores.career;
-  if (!career) {
-    profileStats.innerHTML = '<p class="auth-blurb">No career data yet.</p>';
-    profileLatest.innerHTML = '';
-    profileAwards.innerHTML = '';
-    profileHistory.innerHTML = '<li class="empty">Sign in and finish a game.</li>';
-    return;
-  }
-
-  profileName.value = career.displayName === 'PLAYER' ? auth.displayName : career.displayName;
-
-  profileStats.innerHTML = [
-    ['GAMES', String(career.totalGames)],
-    ['LINES', String(career.totalLinesCleared)],
-    ['PLAY', formatPlayTime(career.totalPlayMs)],
-    ['BEST', String(career.bestScore)],
-    ['BEST LN', String(career.bestLinesInGame)],
-    ['AWARDS', String(career.awardsCount)],
-  ]
-    .map(
-      ([label, value]) => `
-      <div class="profile-stat">
-        <span>${label}</span>
-        <strong>${escapeHtml(value)}</strong>
-      </div>`,
-    )
-    .join('');
-
-  // Public-safe teaser: most recent game without timestamp
-  if (career.totalGames > 0) {
-    profileLatest.innerHTML = `
-      <div class="panel-title profile-section-title">LATEST RUN</div>
-      <p class="latest-run">
-        ${career.latestScore} pts · ${career.latestLines} lines · Lv ${career.latestLevel}
-      </p>`;
-  } else {
-    profileLatest.innerHTML = '';
-  }
-
-  if (!scores.awards.length) {
-    profileAwards.innerHTML = '<li class="empty">Awards unlock as you play.</li>';
-  } else {
-    profileAwards.innerHTML = scores.awards
-      .map(
-        (a) => `
-        <li class="${a.earned ? 'is-earned' : 'is-locked'}" title="${escapeHtml(a.description)}">
-          <span class="award-title">${escapeHtml(a.title)}</span>
-          <span class="award-state">${a.earned ? 'EARNED' : 'LOCKED'}</span>
-        </li>`,
-      )
-      .join('');
-  }
-
-  if (!scores.history.length) {
-    profileHistory.innerHTML =
-      '<li class="empty">No saved games yet — finish a run while signed in.</li>';
-  } else {
-    profileHistory.innerHTML = scores.history
-      .map((run) => {
-        const when = run.endedAt ? formatEndedAt(run.endedAt) : '';
-        return `
-        <li>
-          <span class="hist-score">${run.score}</span>
-          <span class="hist-meta">${run.linesCleared} ln · Lv ${run.levelReached} · ${formatPlayTime(run.durationMs)}</span>
-          <span class="hist-when">${escapeHtml(when)}</span>
-        </li>`;
-      })
-      .join('');
-  }
-}
-
-const playerStat = playerLabel.closest('.stat') as HTMLElement | null;
-
-function refreshHud(): void {
-  playerLabel.textContent = auth.displayName.toUpperCase();
-  bestLabel.textContent = String(scores.highScore);
-  playerStat?.classList.toggle('is-clickable', auth.isSignedIn());
-  if (playerStat) {
-    playerStat.title = auth.isSignedIn() ? 'Open profile' : '';
-  }
-  hudStatusFallback = scores.lastError
-    ? `DB ERROR: ${scores.lastError}`
-    : auth.isSignedIn()
-      ? `${auth.message} · ${scores.statusMessage}`
-      : scores.statusMessage;
-  if (!game.celebration) {
-    statusLine.classList.remove('is-alert', 'alert-tetris', 'alert-perfect', 'alert-tetris_perfect');
-    statusLine.textContent = hudStatusFallback;
-  }
-  authBlurb.textContent = auth.isSignedIn()
-    ? `Signed in as ${auth.displayName}. Career, history, and boards sync across devices.`
-    : 'Sign in to sync career stats, awards, and every finished game.';
-  btnSignOut.hidden = !auth.isSignedIn();
-  btnAuthOpen.hidden = auth.isSignedIn();
-  if (btnAuthOpenSide) btnAuthOpenSide.hidden = auth.isSignedIn();
-  btnProfileOpen.hidden = !auth.isSignedIn();
-  game.setHighScore(scores.highScore);
-  renderLeaderboard();
-  if (profileModal.open) renderProfilePanel();
-}
-
-async function bootstrap(): Promise<void> {
-  await auth.init();
-  await scores.refresh();
-  refreshHud();
-}
-
-auth.onChange(() => {
-  void scores.refresh().then(refreshHud);
+$('#btn-play').addEventListener('click', () => {
+  void sound.unlock();
+  input.trigger('start');
+});
+$('#btn-again').addEventListener('click', () => {
+  void sound.unlock();
+  game.state = STATE_START;
+  syncOverlays();
+});
+$('#btn-resume').addEventListener('click', () => input.trigger('pause'));
+$('#btn-level-up').addEventListener('click', () => input.trigger('levelUp'));
+$('#btn-level-down').addEventListener('click', () => input.trigger('levelDown'));
+$('#btn-pause').addEventListener('click', () => input.trigger('pause'));
+$('#btn-restart').addEventListener('click', () => input.trigger('restart'));
+btnMute.addEventListener('click', () => input.trigger('mute'));
+btnSoundToggle.addEventListener('click', () => {
+  sound.toggleMute();
+  syncSoundButtons();
 });
 
-void bootstrap();
+window.addEventListener('keydown', (e) => {
+  const tag = (e.target as HTMLElement | null)?.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  // Only the play screen owns the arrow keys.
+  if (router.getCurrent()?.name !== 'play') return;
 
-// Touch probes are always attached (tiny) so demos can verify TouchEvent path
-// even when the production bundle sets import.meta.env.DEV === false for tsc.
-window.__dntTouchCol = () => game.getTouchCol();
-window.__dntTouchRow = () => game.getTouchRow();
-window.__dntLastGestureSource = () => getLastGestureSource();
+  if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) {
+    e.preventDefault();
+  }
+  void sound.unlock();
+  input.handleKeyDown(e.code, e);
+});
 
-if (import.meta.env.DEV) {
-  (window as unknown as { __dnt: unknown }).__dnt = { game, renderer, paint, input, sound };
-  window.__dntPreviewCelebration = (kind) => {
-    void sound.unlock();
-    if (game.state === STATE_START) game.touchStartFromTitle();
-    game.previewCelebration(kind);
-    schedulePaint();
-  };
-}
+window.addEventListener('keyup', (e) => {
+  const tag = (e.target as HTMLElement | null)?.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  input.handleKeyUp(e.code);
+});
+
+// ── Auth ──────────────────────────────────────────────────────────────────
 
 function openAuth(): void {
   authError.hidden = true;
-  authError.textContent = '';
   authNotice.hidden = true;
-  authNotice.textContent = '';
   authName.value = auth.displayName === 'PLAYER' ? '' : auth.displayName;
-  authModal.showModal();
+  if (!authModal.open) authModal.showModal();
 }
 
 function closeAuth(): void {
@@ -393,26 +619,49 @@ function closeAuth(): void {
 }
 
 btnAuthOpen.addEventListener('click', openAuth);
-btnAuthOpenSide?.addEventListener('click', openAuth);
-document.querySelector('#btn-auth-close')?.addEventListener('click', closeAuth);
+$('#btn-auth-close').addEventListener('click', closeAuth);
 
-function openPasswordReset(): void {
+/**
+ * Recovery is a one-way door: the only exits are "set a password" or "sign
+ * out". A voluntary change from Settings is an ordinary cancellable dialog.
+ */
+let passwordFlow: 'recovery' | 'voluntary' = 'voluntary';
+
+function openPasswordReset(flow: 'recovery' | 'voluntary'): void {
+  passwordFlow = flow;
   passwordError.hidden = true;
-  passwordError.textContent = '';
   passwordNew.value = '';
   passwordConfirm.value = '';
+
+  const recovery = flow === 'recovery';
+  passwordHint.textContent = recovery
+    ? 'Set a new password to finish resetting your account. You will sign in again afterwards.'
+    : 'Choose a new password for your account.';
+  btnPasswordCancel.textContent = recovery ? 'Cancel & sign out' : 'Cancel';
+
   closeAuth();
   if (!passwordModal.open) passwordModal.showModal();
 }
 
-// Arriving from a reset email: Supabase signs us into a recovery session, then
-// we immediately ask for the replacement password.
-auth.onPasswordRecovery(openPasswordReset);
+// A recovery link necessarily establishes a session — that is what authorises
+// updateUser(). It must not be usable as a back door into the app.
+passwordModal.addEventListener('cancel', (e) => {
+  if (passwordFlow === 'recovery') e.preventDefault();
+});
+
+async function abandonRecovery(): Promise<void> {
+  passwordFlow = 'voluntary';
+  if (passwordModal.open) passwordModal.close();
+  await auth.signOut();
+  await scores.refresh();
+  refreshAccount();
+}
+
+auth.onPasswordRecovery(() => openPasswordReset('recovery'));
 
 btnForgot.addEventListener('click', async () => {
   authError.hidden = true;
   authNotice.hidden = true;
-
   btnForgot.disabled = true;
   const err = await auth.sendPasswordReset(authEmail.value);
   btnForgot.disabled = false;
@@ -426,12 +675,13 @@ btnForgot.addEventListener('click', async () => {
   authNotice.textContent = `If an account exists for ${authEmail.value.trim()}, a reset link is on its way.`;
 });
 
-document.querySelector('#btn-change-password')?.addEventListener('click', () => {
-  closeProfile();
-  openPasswordReset();
-});
+$('#btn-change-password').addEventListener('click', () => openPasswordReset('voluntary'));
 
-document.querySelector('#btn-password-close')?.addEventListener('click', () => {
+btnPasswordCancel.addEventListener('click', () => {
+  if (passwordFlow === 'recovery') {
+    void abandonRecovery();
+    return;
+  }
   if (passwordModal.open) passwordModal.close();
 });
 
@@ -452,70 +702,24 @@ passwordForm.addEventListener('submit', async (e) => {
     return;
   }
 
+  const wasRecovery = passwordFlow === 'recovery';
+  passwordFlow = 'voluntary';
   passwordNew.value = '';
   passwordConfirm.value = '';
   passwordModal.close();
-  await scores.refresh();
-  refreshHud();
-});
 
-function openProfile(): void {
-  if (!auth.isSignedIn()) {
+  await scores.refresh();
+  refreshAccount();
+
+  if (wasRecovery) {
+    // Don't let the emailed link double as a login.
+    await auth.signOut();
+    await scores.refresh();
+    refreshAccount();
     openAuth();
-    return;
+    authNotice.hidden = false;
+    authNotice.textContent = 'Password updated — sign in with your new password.';
   }
-  profileNameMsg.hidden = true;
-  profileNameMsg.textContent = '';
-  renderProfilePanel();
-  profileModal.showModal();
-}
-
-function closeProfile(): void {
-  if (profileModal.open) profileModal.close();
-}
-
-btnProfileOpen.addEventListener('click', openProfile);
-playerStat?.addEventListener('click', () => {
-  if (auth.isSignedIn()) openProfile();
-});
-document.querySelector('#btn-profile-close')?.addEventListener('click', closeProfile);
-
-document.querySelector('#btn-profile-save-name')?.addEventListener('click', async () => {
-  profileNameMsg.hidden = true;
-  const err = await auth.updateDisplayName(profileName.value);
-  if (err) {
-    profileNameMsg.hidden = false;
-    profileNameMsg.textContent = err;
-    return;
-  }
-  await scores.loadProfileBundle();
-  refreshHud();
-  profileNameMsg.hidden = false;
-  profileNameMsg.classList.add('is-ok');
-  profileNameMsg.textContent = 'Name saved';
-  setTimeout(() => {
-    profileNameMsg.hidden = true;
-    profileNameMsg.classList.remove('is-ok');
-  }, 1600);
-});
-
-boardTabs?.addEventListener('click', (e) => {
-  const btn = (e.target as HTMLElement | null)?.closest<HTMLButtonElement>('[data-board]');
-  if (!btn?.dataset.board) return;
-  const kind = btn.dataset.board as LeaderboardKind;
-  for (const tab of boardTabs.querySelectorAll<HTMLButtonElement>('.board-tab')) {
-    const on = tab === btn;
-    tab.classList.toggle('is-active', on);
-    tab.setAttribute('aria-selected', on ? 'true' : 'false');
-  }
-  void scores.setLeaderboardKind(kind).then(renderLeaderboard);
-});
-
-btnSignOut.addEventListener('click', async () => {
-  closeProfile();
-  await auth.signOut();
-  await scores.refresh();
-  refreshHud();
 });
 
 authForm.addEventListener('submit', async (e) => {
@@ -524,19 +728,10 @@ authForm.addEventListener('submit', async (e) => {
   const mode = submitter?.value ?? 'signin';
   authError.hidden = true;
 
-  const email = authEmail.value;
-  const password = authPassword.value;
-  const name = authName.value;
-
-  let error: string | null = null;
-  if (mode === 'signup') {
-    error = await auth.signUp(email, password, name);
-  } else {
-    error = await auth.signIn(email, password);
-    if (!error && name.trim()) {
-      await auth.updateDisplayName(name);
-    }
-  }
+  const error =
+    mode === 'signup'
+      ? await auth.signUp(authEmail.value, authPassword.value, authName.value)
+      : await auth.signIn(authEmail.value, authPassword.value);
 
   if (error) {
     authError.hidden = false;
@@ -544,104 +739,124 @@ authForm.addEventListener('submit', async (e) => {
     return;
   }
 
-  await scores.refresh();
-  refreshHud();
-  closeAuth();
-});
-
-window.addEventListener('keydown', (e) => {
-  const tag = (e.target as HTMLElement | null)?.tagName;
-  if (tag === 'INPUT' || tag === 'TEXTAREA') return;
-  if (e.metaKey || e.ctrlKey || e.altKey) return;
-
-  if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) {
-    e.preventDefault();
+  if (mode === 'signin' && authName.value.trim()) {
+    await auth.updateDisplayName(authName.value);
   }
-  void sound.unlock();
-  input.handleKeyDown(e.code, e);
+
+  await scores.refresh();
+  refreshAccount();
+  closeAuth();
+  rerenderCurrent();
 });
 
-window.addEventListener('keyup', (e) => {
-  const tag = (e.target as HTMLElement | null)?.tagName;
-  if (tag === 'INPUT' || tag === 'TEXTAREA') return;
-  if (e.metaKey || e.ctrlKey || e.altKey) return;
-  input.handleKeyUp(e.code);
+async function doSignOut(): Promise<void> {
+  closeAccountMenu();
+  await auth.signOut();
+  await scores.refresh();
+  refreshAccount();
+  rerenderCurrent();
+}
+
+$('#btn-signout').addEventListener('click', () => void doSignOut());
+$('#btn-signout-settings').addEventListener('click', () => void doSignOut());
+
+$('#btn-profile-save-name').addEventListener('click', async () => {
+  profileNameMsg.hidden = true;
+  const err = await auth.updateDisplayName(profileName.value);
+  if (err) {
+    profileNameMsg.hidden = false;
+    profileNameMsg.className = 'field-msg is-error';
+    profileNameMsg.textContent = err;
+    return;
+  }
+  await scores.loadProfileBundle();
+  refreshAccount();
+  profileNameMsg.hidden = false;
+  profileNameMsg.className = 'field-msg is-ok';
+  profileNameMsg.textContent = 'Name saved';
 });
 
-document.querySelector('#btn-play')?.addEventListener('click', () => {
-  void sound.unlock();
-  input.trigger('start');
-});
-document.querySelector('#btn-level-up')?.addEventListener('click', () => {
-  void sound.unlock();
-  input.trigger('levelUp');
-});
-document.querySelector('#btn-level-down')?.addEventListener('click', () => {
-  void sound.unlock();
-  input.trigger('levelDown');
-});
-document.querySelector('#btn-pause')?.addEventListener('click', () => input.trigger('pause'));
-document.querySelector('#btn-restart')?.addEventListener('click', () => input.trigger('restart'));
-document.querySelector('#btn-mute')?.addEventListener('click', () => input.trigger('mute'));
+/** Re-render whichever data-backed view is on screen after an auth change. */
+function rerenderCurrent(): void {
+  const name = router.getCurrent()?.name;
+  if (name === 'profile') void openOwnProfile();
+  else if (name === 'leaderboardsBoard') renderLeaderboard();
+  else if (name === 'settings') syncSettings();
+}
 
-const sideStack = document.querySelector<HTMLElement>('#side-stack');
-const scoresToggle = document.querySelector<HTMLButtonElement>('#btn-scores-toggle');
-scoresToggle?.addEventListener('click', () => {
-  if (!sideStack) return;
-  const open = sideStack.classList.toggle('is-open');
-  scoresToggle.textContent = open ? 'CLOSE' : 'SCORES';
-});
-document.addEventListener('click', (e) => {
-  if (!sideStack?.classList.contains('is-open')) return;
-  const target = e.target as Node;
-  if (sideStack.contains(target) || scoresToggle?.contains(target)) return;
-  sideStack.classList.remove('is-open');
-  if (scoresToggle) scoresToggle.textContent = 'SCORES';
+// ── Boot ──────────────────────────────────────────────────────────────────
+
+auth.onChange(() => {
+  void scores.refresh().then(() => {
+    refreshAccount();
+    rerenderCurrent();
+  });
 });
 
+async function bootstrap(): Promise<void> {
+  // Route and paint first. Network comes second: if Supabase is slow, blocked
+  // or unreachable, the game must still be playable rather than a blank page.
+  syncSoundButtons();
+  refreshAccount();
+  router.start();
+
+  await auth.init();
+  await scores.refresh();
+  refreshAccount();
+  rerenderCurrent();
+}
+
+void bootstrap();
+
+// ── Loop ──────────────────────────────────────────────────────────────────
+
+let lastGameOverHandled = false;
 let frameAccumulator = 0;
 let lastTime = performance.now();
 
 function frame(now: number): void {
-  // Cap dt so a background tab / long GC pause doesn't dump a huge catch-up debt.
   const dt = Math.min(now - lastTime, (1000 / FPS) * MAX_CATCH_UP_FRAMES);
   lastTime = now;
   frameAccumulator += dt;
   const frameMs = 1000 / FPS;
 
-  // Drop excess debt instead of spiraling: mid-game paint cost used to stack
-  // multiple paints per RAF, which delayed pointer events and mushied DAS.
   if (frameAccumulator > frameMs * MAX_CATCH_UP_FRAMES) {
     frameAccumulator = frameMs * MAX_CATCH_UP_FRAMES;
   }
 
+  const onPlay = router.getCurrent()?.name === 'play';
   let simulated = false;
+
   while (frameAccumulator >= frameMs) {
     frameAccumulator -= frameMs;
+    if (!onPlay) continue; // Other routes don't advance the game.
     simulated = true;
 
     const actions = input.update(now);
-    if (actions.mute) sound.toggleMute();
+    if (actions.mute) {
+      sound.toggleMute();
+      syncSoundButtons();
+    }
 
     const wasGameOver = game.state === STATE_GAME_OVER;
     game.handleInput(actions);
     lineClearProgress = game.update();
 
+    if (game.state === STATE_START) {
+      startLevelEl.textContent = String(game.selectedLevel);
+      lastGameOverHandled = false;
+    }
+
     if (game.state === STATE_GAME_OVER && !wasGameOver && !lastGameOverHandled) {
       lastGameOverHandled = true;
       void scores.submit(game.getRunSummary()).then(() => {
-        game.setHighScore(scores.highScore);
-        refreshHud();
+        refreshAccount();
+        if (auth.isSignedIn()) void scores.loadProfileBundle();
       });
-    }
-
-    if (game.state === STATE_START) {
-      lastGameOverHandled = false;
     }
   }
 
-  // One paint per animation frame — keeps the main thread free for input.
-  if (simulated || paintQueued) {
+  if (onPlay && (simulated || paintQueued)) {
     paintQueued = false;
     paint();
   }
@@ -656,3 +871,9 @@ if ('serviceWorker' in navigator) {
     void navigator.serviceWorker.register('/sw.js').catch(() => undefined);
   });
 }
+
+if (import.meta.env.DEV) {
+  (window as unknown as { __dnt: unknown }).__dnt = { game, renderer, paint, input, sound, scores, router, auth, renderProfile, profileBody, renderLeaderboard };
+}
+
+export { formatPlayTime };

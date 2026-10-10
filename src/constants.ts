@@ -6,18 +6,17 @@ export const BOARD_HIDDEN_ROWS = 2;
 export const BOARD_TOTAL_ROWS = BOARD_ROWS + BOARD_HIDDEN_ROWS;
 
 export const CELL_SIZE = 30;
-export const BOARD_X = 30;
-export const BOARD_Y = 50;
+/**
+ * The canvas is the playfield and nothing else. NEXT / HOLD / score and every
+ * overlay are real DOM now, which is what lets them use app typography, scale
+ * responsively, and be read by a screen reader.
+ */
+export const BOARD_PADDING = 10;
+export const BOARD_X = BOARD_PADDING;
+export const BOARD_Y = BOARD_PADDING;
 
-export const NEXT_PANEL_X = BOARD_X + BOARD_COLS * CELL_SIZE + 20;
-export const NEXT_PANEL_Y = BOARD_Y;
-export const HOLD_PANEL_X = NEXT_PANEL_X;
-export const HOLD_PANEL_Y = NEXT_PANEL_Y + 200;
-export const SCORE_PANEL_X = NEXT_PANEL_X;
-export const SCORE_PANEL_Y = HOLD_PANEL_Y + 120;
-
-export const WINDOW_WIDTH = 500;
-export const WINDOW_HEIGHT = 700;
+export const WINDOW_WIDTH = BOARD_COLS * CELL_SIZE + BOARD_PADDING * 2;
+export const WINDOW_HEIGHT = BOARD_ROWS * CELL_SIZE + BOARD_PADDING * 2;
 
 export type RGB = readonly [number, number, number];
 
