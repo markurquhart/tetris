@@ -424,8 +424,8 @@ a {
 
 .play-grid {
   display: grid;
-  grid-template-columns: 168px minmax(0, auto) 168px;
-  gap: 18px;
+  grid-template-columns: 290px auto 290px;
+  gap: 34px;
   align-items: start;
 }
 
@@ -449,14 +449,37 @@ a {
 
 .stat-value {
   font-family: var(--font-mono);
-  font-size: 1.5rem;
+  font-size: 1.9rem;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.02em;
 }
 
 .stat-card-sm .stat-value {
-  font-size: 1.1rem;
+  font-size: 1.25rem;
+}
+
+/* Secondary read-outs for the current run; keeps the left rail purposeful. */
+.run-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.run-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 0.86rem;
+  color: var(--text-2);
+}
+
+.run-row strong {
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
 }
 
 .playfield-wrap {
@@ -464,11 +487,18 @@ a {
   flex-direction: column;
   gap: 10px;
   align-items: center;
+  justify-content: flex-start;
 }
 
+/*
+ * Size the board off the viewport height, not a fixed pixel cap. A 10x20 well
+ * is inherently narrow, so height is the dimension worth spending — capping
+ * the width left most of the screen empty and made the game look like a toy.
+ */
 .playfield {
   position: relative;
-  width: min(100%, 340px);
+  height: min(calc(100dvh - var(--appbar-h) - 104px), 860px);
+  width: auto;
   aspect-ratio: 320 / 620;
   border-radius: var(--radius-lg);
   overflow: hidden;
@@ -542,6 +572,11 @@ a {
   font-size: 1.2rem;
 }
 
+.overlay-actions {
+  display: flex;
+  gap: 8px;
+}
+
 .final-stats {
   display: flex;
   gap: 22px;
@@ -569,14 +604,19 @@ a {
 .preview-stack {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  margin-top: 8px;
+  gap: 6px;
+  margin-top: 10px;
 }
 
 .preview {
   display: block;
-  width: 100%;
-  height: auto;
+  width: auto;
+  height: 54px;
+  margin: 0 auto;
+}
+
+.preview-lg {
+  height: 76px;
 }
 
 .play-actions {
@@ -1260,69 +1300,88 @@ a {
 /* ── Responsive ──────────────────────────────────────────────────────── */
 
 @media (max-width: 900px) {
-  /* Phone layout: two compact strips above the board, actions beneath it, and
-     the playfield taking whatever height is left. Nothing below the fold. */
+  /*
+   * Phone: the board is the control surface and gets essentially the whole
+   * screen. ALL chrome collapses into one ~46px strip above it; Restart and
+   * Sound live in the pause overlay instead of taking a row of their own.
+   */
   .play-grid {
     display: flex;
-    flex-direction: column;
-    gap: 8px;
+    flex-wrap: wrap;
+    align-items: stretch;
+    gap: 4px;
   }
 
-  .play-rail-left {
-    order: 1;
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 6px;
-  }
-
-  .play-rail-left .stat-row {
+  .play-rail,
+  .stat-row {
     display: contents;
   }
 
-  .play-rail-right {
-    order: 2;
-    display: grid;
-    grid-template-columns: 2fr 1fr;
-    gap: 6px;
-  }
-
-  .playfield-wrap {
-    order: 3;
-  }
-
   .play-rail .card {
-    padding: 6px 9px;
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 3px 7px;
+    order: 1;
+  }
+
+  .play-rail-left .card-label,
+  .play-rail-right .card-label {
+    font-size: 0.55rem;
+    letter-spacing: 0.06em;
   }
 
   .play-rail-left .stat-value {
-    font-size: 1rem;
+    font-size: 0.92rem;
+  }
+
+  .play-rail-left .stat-card:first-child {
+    flex: 1.5 1 0;
+  }
+
+  /* Best and the run breakdown belong on the profile, not over the board. */
+  .play-rail-left .stat-card:nth-of-type(3),
+  .run-card {
+    display: none;
   }
 
   .play-rail-right .preview-stack {
     flex-direction: row;
-    gap: 4px;
-    margin-top: 4px;
+    gap: 2px;
+    margin-top: 1px;
   }
 
-  .play-rail-right .preview {
-    height: 30px;
-    width: auto;
-    flex: 1;
-    min-width: 0;
+  .play-rail-right .preview,
+  .play-rail-right .preview-lg {
+    height: 18px;
   }
 
   .play-actions {
-    grid-column: 1 / -1;
+    order: 1;
+    flex: 0 0 auto;
     flex-direction: row;
-    gap: 6px;
+    align-items: stretch;
   }
 
-  .play-actions .btn {
-    flex: 1;
+  /* Only Pause stays on the strip; the rest live in the pause overlay. */
+  .play-actions .btn:not(#btn-pause) {
+    display: none;
+  }
+
+  #btn-pause {
+    padding: 0 10px;
+    font-size: 0.72rem;
+  }
+
+  /* Forced onto its own line, below everything above. */
+  .playfield-wrap {
+    order: 2;
+    flex: 1 0 100%;
+    gap: 4px;
   }
 
   .touch-hint {
     display: block;
+    font-size: 0.68rem;
   }
 
   /* Once play starts the hint has done its job; reclaim it for the board. */
@@ -1369,12 +1428,58 @@ a {
   }
 }
 
-/* The playfield must stay fully visible without scrolling while playing. */
-@media (max-width: 760px) and (min-height: 600px) {
+/*
+ * The board must fill the screen without distorting or scrolling.
+ *
+ * `width: 100%` plus `max-height` silently breaks `aspect-ratio` — the width
+ * stays put while the height clamps, and the canvas stretches. So drive from
+ * height only, and take the smaller of "height that fits vertically" and
+ * "height implied by the available width". One free dimension, no clamping.
+ */
+@media (max-width: 900px) {
   .playfield {
     width: auto;
-    max-height: calc(100dvh - var(--appbar-h) - var(--tabbar-h) - 212px);
     aspect-ratio: 320 / 620;
+    height: min(
+      calc(100dvh - var(--appbar-h) - var(--tabbar-h) - 96px),
+      calc((100vw - 28px) * 620 / 320)
+    );
+    max-height: none;
+  }
+
+  /*
+   * Mid-game the app bar is dead weight — the tab bar still carries
+   * navigation, so hand those pixels to the gesture surface.
+   */
+  body.is-playing .appbar {
+    display: none;
+  }
+
+  body.is-playing .outlet {
+    padding: 6px 8px 8px;
+  }
+
+  body.is-playing .playfield {
+    height: min(
+      calc(100dvh - var(--tabbar-h) - 62px),
+      calc((100vw - 16px) * 620 / 320)
+    );
+  }
+}
+
+/*
+ * Short screens (SE-class) are height-bound: the well is taller in aspect than
+ * the display, so every pixel of chrome costs board width. Taller phones are
+ * already width-bound and gain nothing from this, so scope it tightly. Pausing
+ * clears `is-playing` and brings navigation straight back.
+ */
+@media (max-width: 900px) and (max-height: 740px) {
+  body.is-playing .tabbar {
+    display: none;
+  }
+
+  body.is-playing .playfield {
+    height: min(calc(100dvh - 76px), calc((100vw - 16px) * 620 / 320));
   }
 }
 

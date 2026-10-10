@@ -74,6 +74,9 @@ const hudScore = $('#hud-score');
 const hudLevel = $('#hud-level');
 const hudLines = $('#hud-lines');
 const hudBest = $('#hud-best');
+const hudTime = $('#hud-time');
+const hudTetris = $('#hud-tetris');
+const hudStartLevel = $('#hud-startlevel');
 
 const nextCanvases = [
   $<HTMLCanvasElement>('#next-0'),
@@ -121,6 +124,7 @@ const settingsAccount = $('#settings-account');
 const settingsSignedOut = $('#settings-signed-out');
 const btnSoundToggle = $<HTMLButtonElement>('#btn-sound-toggle');
 const btnMute = $<HTMLButtonElement>('#btn-mute');
+const btnSoundPaused = $<HTMLButtonElement>('#btn-sound-paused');
 
 // ── Routing ───────────────────────────────────────────────────────────────
 
@@ -375,8 +379,10 @@ function syncSoundButtons(): void {
   const on = sound.isEnabled();
   btnSoundToggle.textContent = on ? 'On' : 'Off';
   btnSoundToggle.setAttribute('aria-pressed', String(on));
-  btnMute.textContent = on ? 'Sound on' : 'Sound off';
-  btnMute.setAttribute('aria-pressed', String(on));
+  for (const btn of [btnMute, btnSoundPaused]) {
+    btn.textContent = on ? 'Sound on' : 'Sound off';
+    btn.setAttribute('aria-pressed', String(on));
+  }
 }
 
 // ── Account chrome ────────────────────────────────────────────────────────
@@ -427,6 +433,7 @@ document.addEventListener('click', (e) => {
 // ── Game HUD (DOM, not canvas) ────────────────────────────────────────────
 
 let lastHudKey = '';
+let lastElapsedSec = -1;
 let lastPreviewKey = '';
 
 function syncHud(): void {
@@ -436,6 +443,19 @@ function syncHud(): void {
     hudScore.textContent = game.score.toLocaleString();
     hudLevel.textContent = String(game.level);
     hudLines.textContent = String(game.linesCleared);
+  }
+
+  // Elapsed time ticks on its own clock, so key it to whole seconds rather
+  // than the score — otherwise it would never refresh during a quiet stretch.
+  const elapsed =
+    game.playStartedAt > 0 && game.state === STATE_PLAYING
+      ? Math.floor((performance.now() - game.playStartedAt) / 1000)
+      : -1;
+  if (elapsed !== lastElapsedSec) {
+    lastElapsedSec = elapsed;
+    hudTime.textContent = elapsed < 0 ? '—' : formatPlayTime(elapsed * 1000);
+    hudTetris.textContent = String(game.tetrisCount);
+    hudStartLevel.textContent = String(game.selectedLevel);
   }
 
   const previewKey = `${game.nextPieces.join(',')}|${game.holdPieceType}|${game.holdAvailable}`;
@@ -574,6 +594,11 @@ $('#btn-again').addEventListener('click', () => {
   syncOverlays();
 });
 $('#btn-resume').addEventListener('click', () => input.trigger('pause'));
+$('#btn-restart-paused').addEventListener('click', () => input.trigger('restart'));
+$('#btn-sound-paused').addEventListener('click', () => {
+  sound.toggleMute();
+  syncSoundButtons();
+});
 $('#btn-level-up').addEventListener('click', () => input.trigger('levelUp'));
 $('#btn-level-down').addEventListener('click', () => input.trigger('levelDown'));
 $('#btn-pause').addEventListener('click', () => input.trigger('pause'));

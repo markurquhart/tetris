@@ -1,6 +1,6 @@
 import type { AuthService } from './auth';
 import type { GameRunSummary } from './game';
-import { isSupabaseConfigured, supabase } from './supabaseClient';
+import { isSupabaseConfigured, supabase, supabaseHost } from './supabaseClient';
 
 const LOCAL_HIGH_KEY = 'tetris_local_high';
 /** Remembers each board's rank between visits so we can show a delta. */
@@ -526,7 +526,15 @@ export class ScoreService {
 function describeError(err: unknown): string {
   if (!err || typeof err !== 'object') return String(err);
   const e = err as { message?: string; code?: string; hint?: string; details?: string };
+
+  // supabase-js surfaces an unreachable host as a bare "TypeError: Failed to
+  // fetch", which tells the reader nothing. Name the host and the likely cause.
+  const message = e.message ?? 'Unknown error';
+  if (/failed to fetch|networkerror|load failed/i.test(message)) {
+    return `can't reach ${supabaseHost ?? 'the database'} — check VITE_SUPABASE_URL in .env, and that you are online`;
+  }
+
   const code = e.code ? ` [${e.code}]` : '';
-  return `${e.message ?? 'Unknown error'}${code}${e.hint ? ` — ${e.hint}` : ''}`;
+  return `${message}${code}${e.hint ? ` — ${e.hint}` : ''}`;
 }
 
