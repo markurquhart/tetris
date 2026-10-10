@@ -74,6 +74,12 @@
                 <span class="card-label">Best</span>
                 <strong class="stat-value muted" id="hud-best">0</strong>
               </div>
+              <div class="card run-card" id="run-card">
+                <span class="card-label">This run</span>
+                <span class="run-row">Time <strong id="hud-time">0s</strong></span>
+                <span class="run-row">Tetrises <strong id="hud-tetris">0</strong></span>
+                <span class="run-row">Start level <strong id="hud-startlevel">0</strong></span>
+              </div>
             </aside>
 
             <div class="playfield-wrap">
@@ -97,7 +103,11 @@
 
                 <div class="overlay" id="overlay-paused" hidden>
                   <h2 class="overlay-title">Paused</h2>
-                  <button type="button" class="btn btn-primary" id="btn-resume">Resume</button>
+                  <button type="button" class="btn btn-primary btn-lg" id="btn-resume">Resume</button>
+                  <div class="overlay-actions">
+                    <button type="button" class="btn btn-ghost" id="btn-restart-paused">Restart</button>
+                    <button type="button" class="btn btn-ghost" id="btn-sound-paused" aria-pressed="true">Sound on</button>
+                  </div>
                 </div>
 
                 <div class="overlay" id="overlay-gameover" hidden>
