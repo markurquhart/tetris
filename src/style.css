@@ -1467,6 +1467,22 @@ a {
   }
 }
 
+/*
+ * Short screens (SE-class) are height-bound: the well is taller in aspect than
+ * the display, so every pixel of chrome costs board width. Taller phones are
+ * already width-bound and gain nothing from this, so scope it tightly. Pausing
+ * clears `is-playing` and brings navigation straight back.
+ */
+@media (max-width: 900px) and (max-height: 740px) {
+  body.is-playing .tabbar {
+    display: none;
+  }
+
+  body.is-playing .playfield {
+    height: min(calc(100dvh - 76px), calc((100vw - 16px) * 620 / 320));
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     animation-duration: 0.01ms !important;
