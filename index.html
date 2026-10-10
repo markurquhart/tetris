@@ -130,6 +130,7 @@
         <ol id="profile-history" class="history-list"></ol>
 
         <div class="auth-actions">
+          <button type="button" class="dock-btn" id="btn-change-password">CHANGE PASSWORD</button>
           <button type="button" class="dock-btn ghost" id="btn-profile-close">CLOSE</button>
         </div>
       </div>
@@ -162,11 +163,52 @@
         </label>
 
         <p id="auth-error" class="auth-error" role="alert" hidden></p>
+        <p id="auth-notice" class="auth-notice" role="status" hidden></p>
 
         <div class="auth-actions">
           <button type="submit" class="dock-btn primary" id="btn-signin" value="signin">SIGN IN</button>
           <button type="submit" class="dock-btn" id="btn-signup" value="signup">CREATE</button>
           <button type="button" class="dock-btn ghost" id="btn-auth-close">CLOSE</button>
+        </div>
+        <button type="button" class="link-btn" id="btn-forgot">Forgot your password?</button>
+      </form>
+    </dialog>
+
+    <dialog id="password-modal" class="auth-modal">
+      <form method="dialog" id="password-form" class="auth-card">
+        <div class="auth-marquee">NEW PASSWORD</div>
+        <p class="auth-hint">Choose a new password for your account.</p>
+
+        <label>
+          New password
+          <input
+            id="password-new"
+            name="newPassword"
+            type="password"
+            required
+            minlength="6"
+            autocomplete="new-password"
+            placeholder="••••••••"
+          />
+        </label>
+        <label>
+          Confirm password
+          <input
+            id="password-confirm"
+            name="confirmPassword"
+            type="password"
+            required
+            minlength="6"
+            autocomplete="new-password"
+            placeholder="••••••••"
+          />
+        </label>
+
+        <p id="password-error" class="auth-error" role="alert" hidden></p>
+
+        <div class="auth-actions">
+          <button type="submit" class="dock-btn primary" id="btn-password-save">SAVE</button>
+          <button type="button" class="dock-btn ghost" id="btn-password-close">CANCEL</button>
         </div>
       </form>
     </dialog>

@@ -199,6 +199,13 @@ const boardTabs = document.querySelector<HTMLElement>('#board-tabs')!;
 const authModal = document.querySelector<HTMLDialogElement>('#auth-modal')!;
 const authForm = document.querySelector<HTMLFormElement>('#auth-form')!;
 const authError = document.querySelector<HTMLElement>('#auth-error')!;
+const authNotice = document.querySelector<HTMLElement>('#auth-notice')!;
+const btnForgot = document.querySelector<HTMLButtonElement>('#btn-forgot')!;
+const passwordModal = document.querySelector<HTMLDialogElement>('#password-modal')!;
+const passwordForm = document.querySelector<HTMLFormElement>('#password-form')!;
+const passwordNew = document.querySelector<HTMLInputElement>('#password-new')!;
+const passwordConfirm = document.querySelector<HTMLInputElement>('#password-confirm')!;
+const passwordError = document.querySelector<HTMLElement>('#password-error')!;
 const authName = document.querySelector<HTMLInputElement>('#auth-name')!;
 const authEmail = document.querySelector<HTMLInputElement>('#auth-email')!;
 const authPassword = document.querySelector<HTMLInputElement>('#auth-password')!;
@@ -224,7 +231,9 @@ function escapeHtml(s: string): string {
 
 function renderLeaderboard(): void {
   if (!scores.leaderboard.length) {
-    leaderboardEl.innerHTML = '<li class="empty">Waiting for challengers…</li>';
+    leaderboardEl.innerHTML = scores.lastError
+      ? `<li class="empty">Board unavailable — ${escapeHtml(scores.lastError)}</li>`
+      : '<li class="empty">Waiting for challengers…</li>';
     return;
   }
 
@@ -321,9 +330,11 @@ function refreshHud(): void {
   if (playerStat) {
     playerStat.title = auth.isSignedIn() ? 'Open profile' : '';
   }
-  hudStatusFallback = auth.isSignedIn()
-    ? `${auth.message} · ${scores.statusMessage}`
-    : scores.statusMessage;
+  hudStatusFallback = scores.lastError
+    ? `DB ERROR: ${scores.lastError}`
+    : auth.isSignedIn()
+      ? `${auth.message} · ${scores.statusMessage}`
+      : scores.statusMessage;
   if (!game.celebration) {
     statusLine.classList.remove('is-alert', 'alert-tetris', 'alert-perfect', 'alert-tetris_perfect');
     statusLine.textContent = hudStatusFallback;
@@ -359,6 +370,7 @@ window.__dntTouchRow = () => game.getTouchRow();
 window.__dntLastGestureSource = () => getLastGestureSource();
 
 if (import.meta.env.DEV) {
+  (window as unknown as { __dnt: unknown }).__dnt = { game, renderer, paint, input, sound };
   window.__dntPreviewCelebration = (kind) => {
     void sound.unlock();
     if (game.state === STATE_START) game.touchStartFromTitle();
@@ -370,6 +382,8 @@ if (import.meta.env.DEV) {
 function openAuth(): void {
   authError.hidden = true;
   authError.textContent = '';
+  authNotice.hidden = true;
+  authNotice.textContent = '';
   authName.value = auth.displayName === 'PLAYER' ? '' : auth.displayName;
   authModal.showModal();
 }
@@ -381,6 +395,69 @@ function closeAuth(): void {
 btnAuthOpen.addEventListener('click', openAuth);
 btnAuthOpenSide?.addEventListener('click', openAuth);
 document.querySelector('#btn-auth-close')?.addEventListener('click', closeAuth);
+
+function openPasswordReset(): void {
+  passwordError.hidden = true;
+  passwordError.textContent = '';
+  passwordNew.value = '';
+  passwordConfirm.value = '';
+  closeAuth();
+  if (!passwordModal.open) passwordModal.showModal();
+}
+
+// Arriving from a reset email: Supabase signs us into a recovery session, then
+// we immediately ask for the replacement password.
+auth.onPasswordRecovery(openPasswordReset);
+
+btnForgot.addEventListener('click', async () => {
+  authError.hidden = true;
+  authNotice.hidden = true;
+
+  btnForgot.disabled = true;
+  const err = await auth.sendPasswordReset(authEmail.value);
+  btnForgot.disabled = false;
+
+  if (err) {
+    authError.hidden = false;
+    authError.textContent = err;
+    return;
+  }
+  authNotice.hidden = false;
+  authNotice.textContent = `If an account exists for ${authEmail.value.trim()}, a reset link is on its way.`;
+});
+
+document.querySelector('#btn-change-password')?.addEventListener('click', () => {
+  closeProfile();
+  openPasswordReset();
+});
+
+document.querySelector('#btn-password-close')?.addEventListener('click', () => {
+  if (passwordModal.open) passwordModal.close();
+});
+
+passwordForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  passwordError.hidden = true;
+
+  if (passwordNew.value !== passwordConfirm.value) {
+    passwordError.hidden = false;
+    passwordError.textContent = 'Passwords do not match';
+    return;
+  }
+
+  const err = await auth.updatePassword(passwordNew.value);
+  if (err) {
+    passwordError.hidden = false;
+    passwordError.textContent = err;
+    return;
+  }
+
+  passwordNew.value = '';
+  passwordConfirm.value = '';
+  passwordModal.close();
+  await scores.refresh();
+  refreshHud();
+});
 
 function openProfile(): void {
   if (!auth.isSignedIn()) {

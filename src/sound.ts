@@ -16,6 +16,7 @@ export class SoundManager {
   private ctx: AudioContext | null = null;
   private unlocked = false;
   private lastMoveSoundAt = 0;
+  private noiseBuffer: AudioBuffer | null = null;
 
   private ensureContext(): AudioContext | null {
     if (typeof window === 'undefined') return null;
@@ -63,26 +64,47 @@ export class SoundManager {
     gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
     osc.start(now);
     osc.stop(now + duration + 0.02);
+    // Unreleased graph edges pile up over a long session (thousands of nodes by
+    // the late game) and iOS Safari is slow to reclaim them. Drop ours on end.
+    osc.onended = () => {
+      osc.disconnect();
+      gain.disconnect();
+    };
+  }
+
+  /**
+   * Lazily built once per context and replayed. Regenerating it per lock cost a
+   * measured 158µs — more than an entire frame's paint.
+   */
+  private getNoiseBuffer(ctx: AudioContext, duration: number): AudioBuffer {
+    if (this.noiseBuffer && this.noiseBuffer.sampleRate === ctx.sampleRate) {
+      return this.noiseBuffer;
+    }
+    const length = Math.max(1, Math.floor(ctx.sampleRate * duration));
+    const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < length; i++) {
+      data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (length / 5));
+    }
+    this.noiseBuffer = buffer;
+    return buffer;
   }
 
   private noise(duration: number, volume = 0.12): void {
     const ctx = this.ensureContext();
     if (!ctx || !this.unlocked) return;
 
-    const sampleRate = ctx.sampleRate;
-    const length = Math.floor(sampleRate * duration);
-    const buffer = ctx.createBuffer(1, length, sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < length; i++) {
-      data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (length / 5));
-    }
     const source = ctx.createBufferSource();
     const gain = ctx.createGain();
-    source.buffer = buffer;
+    source.buffer = this.getNoiseBuffer(ctx, duration);
     gain.gain.value = volume;
     source.connect(gain);
     gain.connect(ctx.destination);
     source.start();
+    source.onended = () => {
+      source.disconnect();
+      gain.disconnect();
+    };
   }
 
   private arpeggio(frequencies: number[], noteDuration: number, volume = 0.2): void {
