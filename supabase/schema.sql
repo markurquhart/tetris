@@ -319,11 +319,14 @@ grant execute on function public.record_game_run(
 -- ---------------------------------------------------------------------------
 -- Leaderboard views
 -- ---------------------------------------------------------------------------
+-- `value` mirrors high_score so all five boards share one client code path.
+-- (Appended last: create-or-replace may add columns at the end only.)
 create or replace view public.leaderboard as
 select
   p.display_name,
   s.high_score,
-  s.updated_at
+  s.updated_at,
+  s.high_score as value
 from public.scores s
 join public.profiles p on p.id = s.user_id
 where s.high_score > 0
@@ -373,6 +376,14 @@ alter table public.scores enable row level security;
 alter table public.game_runs enable row level security;
 alter table public.awards enable row level security;
 alter table public.user_awards enable row level security;
+
+-- Legacy sync-code table: nothing in the app reads or writes it, but it shipped
+-- without RLS, leaving it publicly readable *and writable*. RLS on with no
+-- policies = deny-all for anon/authenticated (service_role still bypasses), so
+-- any old rows are preserved and simply sealed off. Safe to
+-- `drop table public.tetris_scores;` instead if you don't want the history.
+alter table public.tetris_scores enable row level security;
+revoke all on public.tetris_scores from anon, authenticated;
 
 -- Profiles
 drop policy if exists "Profiles are viewable by everyone" on public.profiles;
@@ -444,6 +455,15 @@ create policy "Users can insert own awards"
   with check (auth.uid() = user_id);
 
 -- Grants
+-- RLS decides which ROWS are visible; these grants decide whether the anon /
+-- authenticated roles may touch the table at all. Without them every read fails
+-- with "permission denied" before RLS is ever consulted.
+grant select on public.profiles to anon, authenticated;
+grant insert, update on public.profiles to authenticated;
+grant select on public.scores to anon, authenticated;
+grant insert, update on public.scores to authenticated;
+grant insert on public.user_awards to authenticated;
+
 grant select on public.leaderboard to anon, authenticated;
 grant select on public.leaderboard_career_lines to anon, authenticated;
 grant select on public.leaderboard_play_time to anon, authenticated;
@@ -452,3 +472,10 @@ grant select on public.leaderboard_best_lines to anon, authenticated;
 grant select on public.awards to anon, authenticated;
 grant select on public.user_awards to anon, authenticated;
 grant select on public.game_runs to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Tell PostgREST to re-read the schema. Without this, new columns and views can
+-- stay invisible to the API (and the app keeps reporting empty) until the
+-- project restarts — the usual cause of "I re-ran the SQL but nothing changed".
+-- ---------------------------------------------------------------------------
+notify pgrst, 'reload schema';

@@ -50,10 +50,20 @@ export interface AwardInfo {
   earnedAt: string | null;
 }
 
+/**
+ * Every board reads a dedicated view exposing (display_name, value).
+ *
+ * `score` used to query the `scores` table with a PostgREST embed
+ * (`profiles(display_name)`), which silently returns nothing whenever the
+ * schema cache can't resolve the scores→profiles foreign key (PGRST200). The
+ * `leaderboard` view does that join in Postgres, so there is no relationship
+ * for PostgREST to infer.
+ */
 const LEADERBOARD_VIEWS: Record<
-  Exclude<LeaderboardKind, 'score'>,
+  LeaderboardKind,
   { view: string; format: (n: number) => string }
 > = {
+  score: { view: 'leaderboard', format: (n) => String(n) },
   lines: { view: 'leaderboard_career_lines', format: (n) => String(n) },
   time: { view: 'leaderboard_play_time', format: formatPlayTime },
   awards: { view: 'leaderboard_awards', format: (n) => String(n) },
@@ -110,6 +120,8 @@ export class ScoreService {
   history: GameHistoryEntry[] = [];
   awards: AwardInfo[] = [];
   lastNewAwards: string[] = [];
+  /** Most recent Supabase failure, surfaced in the HUD instead of swallowed. */
+  lastError: string | null = null;
   private auth: AuthService;
 
   constructor(auth: AuthService) {
@@ -263,45 +275,34 @@ export class ScoreService {
       return this.leaderboard;
     }
 
+    const meta = LEADERBOARD_VIEWS[this.leaderboardKind];
+
     try {
-      if (this.leaderboardKind === 'score') {
-        const { data, error } = await supabase
-          .from('scores')
-          .select('high_score, profiles(display_name)')
-          .gt('high_score', 0)
-          .order('high_score', { ascending: false })
-          .limit(8);
+      // The views carry their own ORDER BY, but PostgREST wraps them in an
+      // outer query with LIMIT — without an explicit order that returns an
+      // arbitrary 8 rows rather than the top 8.
+      const { data, error } = await supabase
+        .from(meta.view)
+        .select('display_name, value')
+        .order('value', { ascending: false })
+        .limit(8);
 
-        if (error) throw error;
+      if (error) throw error;
 
-        this.leaderboard = (data ?? []).map((row) => {
-          const name = extractDisplayName(row.profiles);
-          return {
-            displayName: name,
-            value: row.high_score ?? 0,
-            displayValue: String(row.high_score ?? 0),
-          };
-        });
-      } else {
-        const meta = LEADERBOARD_VIEWS[this.leaderboardKind];
-        const { data, error } = await supabase
-          .from(meta.view)
-          .select('display_name, value')
-          .limit(8);
-
-        if (error) throw error;
-
-        this.leaderboard = (data ?? []).map((row) => {
-          const value = Number(row.value) || 0;
-          return {
-            displayName: String(row.display_name ?? 'PLAYER').toUpperCase(),
-            value,
-            displayValue: meta.format(value),
-          };
-        });
-      }
-    } catch {
-      // Keep previous leaderboard on failure (e.g. views not migrated yet)
+      this.leaderboard = (data ?? []).map((row) => {
+        const value = Number(row.value) || 0;
+        return {
+          displayName: String(row.display_name ?? 'PLAYER').toUpperCase(),
+          value,
+          displayValue: meta.format(value),
+        };
+      });
+      this.lastError = null;
+    } catch (err) {
+      // Keep the previous leaderboard, but don't hide *why* it is stale —
+      // a silent catch here is indistinguishable from "nobody has played yet".
+      this.lastError = describeError(err);
+      console.warn('[scores] leaderboard fetch failed:', err);
     }
 
     return this.leaderboard;
@@ -337,6 +338,17 @@ export class ScoreService {
         supabase.from('awards').select('code, title, description, sort_order').order('sort_order'),
         supabase.from('user_awards').select('award_code, earned_at').eq('user_id', uid),
       ]);
+
+      // Each of these can fail independently (missing grant, un-migrated view,
+      // stale PostgREST cache). Report the first failure instead of silently
+      // rendering an empty profile.
+      const failure = [profileRes, runsRes, awardsRes, earnedRes].find((r) => r.error);
+      if (failure?.error) {
+        this.lastError = describeError(failure.error);
+        console.warn('[scores] profile bundle partial failure:', failure.error);
+      } else {
+        this.lastError = null;
+      }
 
       if (profileRes.data) {
         const p = profileRes.data;
@@ -385,18 +397,20 @@ export class ScoreService {
         earned: earnedMap.has(row.code),
         earnedAt: earnedMap.get(row.code) ?? null,
       }));
-    } catch {
+    } catch (err) {
       // Profile columns / tables may not exist until schema.sql is re-run
+      this.lastError = describeError(err);
+      console.warn('[scores] profile bundle failed:', err);
       this.career = this.career ?? emptyCareer(this.auth.displayName);
     }
   }
 }
 
-function extractDisplayName(
-  profile: { display_name?: string } | { display_name?: string }[] | null,
-): string {
-  const name = Array.isArray(profile)
-    ? profile[0]?.display_name
-    : profile?.display_name;
-  return (name ?? 'PLAYER').toUpperCase();
+/** Postgres/PostgREST errors carry the useful detail in code + hint. */
+function describeError(err: unknown): string {
+  if (!err || typeof err !== 'object') return String(err);
+  const e = err as { message?: string; code?: string; hint?: string; details?: string };
+  const code = e.code ? ` [${e.code}]` : '';
+  return `${e.message ?? 'Unknown error'}${code}${e.hint ? ` — ${e.hint}` : ''}`;
 }
+
