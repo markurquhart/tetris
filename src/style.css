@@ -706,6 +706,30 @@ input {
   font-size: 0.85rem;
 }
 
+.auth-notice {
+  margin: 0;
+  color: var(--accent);
+  font-size: 0.85rem;
+}
+
+.link-btn {
+  margin: 2px 0 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.8rem;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.link-btn:hover,
+.link-btn:focus-visible {
+  color: var(--accent);
+}
+
 /* Phone / narrow: one column, maximize playfield */
 @media (max-width: 900px) {
   .shell {

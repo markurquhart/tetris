@@ -14,15 +14,30 @@ export class AuthService {
     ? 'Sign in to sync scores across devices'
     : 'Add Supabase keys to enable login';
 
+  /** True while the user is here from a password-reset email. */
+  recoveryMode = false;
+
   private listeners = new Set<() => void>();
+  private recoveryListeners = new Set<() => void>();
 
   onChange(cb: () => void): () => void {
     this.listeners.add(cb);
     return () => this.listeners.delete(cb);
   }
 
+  /** Fires when a recovery link puts us in "choose a new password" mode. */
+  onPasswordRecovery(cb: () => void): () => void {
+    this.recoveryListeners.add(cb);
+    return () => this.recoveryListeners.delete(cb);
+  }
+
   private emit(): void {
     for (const cb of this.listeners) cb();
+  }
+
+  private emitRecovery(): void {
+    this.recoveryMode = true;
+    for (const cb of this.recoveryListeners) cb();
   }
 
   async init(): Promise<void> {
@@ -31,12 +46,24 @@ export class AuthService {
       return;
     }
 
+    // detectSessionInUrl consumes the hash before we can read it, so sample the
+    // recovery marker first — the PASSWORD_RECOVERY event can fire before the
+    // listener below is attached.
+    const hash = window.location.hash;
+    const arrivedViaRecovery =
+      hash.includes('type=recovery') ||
+      new URLSearchParams(window.location.search).get('type') === 'recovery';
+
     const { data } = await supabase.auth.getSession();
     await this.applySession(data.session);
 
-    supabase.auth.onAuthStateChange((_event, session) => {
-      void this.applySession(session);
+    supabase.auth.onAuthStateChange((event, session) => {
+      void this.applySession(session).then(() => {
+        if (event === 'PASSWORD_RECOVERY') this.emitRecovery();
+      });
     });
+
+    if (arrivedViaRecovery) this.emitRecovery();
   }
 
   private async applySession(session: Session | null): Promise<void> {
@@ -110,8 +137,41 @@ export class AuthService {
     return error ? error.message : null;
   }
 
+  /**
+   * Email a reset link. Always reports success — a distinct "no such account"
+   * reply would let anyone probe which emails are registered.
+   */
+  async sendPasswordReset(email: string): Promise<string | null> {
+    if (!supabase) return 'Database not configured';
+    const cleaned = email.trim();
+    if (!cleaned) return 'Enter your email address first';
+
+    const { error } = await supabase.auth.resetPasswordForEmail(cleaned, {
+      redirectTo: `${window.location.origin}/`,
+    });
+
+    // Rate limiting is worth surfacing; anything else stays generic.
+    if (error && /rate|too many|limit/i.test(error.message)) return error.message;
+    return null;
+  }
+
+  /** Finish a recovery: set the new password on the active recovery session. */
+  async updatePassword(password: string): Promise<string | null> {
+    if (!supabase) return 'Database not configured';
+    if (password.length < 6) return 'Password must be at least 6 characters';
+
+    const { error } = await supabase.auth.updateUser({ password });
+    if (error) return error.message;
+
+    this.recoveryMode = false;
+    // Drop the recovery token from the address bar so a refresh is a normal load.
+    window.history.replaceState(null, '', window.location.pathname);
+    return null;
+  }
+
   async signOut(): Promise<void> {
     if (!supabase) return;
+    this.recoveryMode = false;
     await supabase.auth.signOut();
   }
 

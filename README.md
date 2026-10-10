@@ -29,6 +29,13 @@ VITE_SUPABASE_ANON_KEY=YOUR_ANON_KEY
    - Site URL: `https://def-not-tetris.com`
    - Redirect URLs: `https://def-not-tetris.com/**` and `http://localhost:5173/**`
 
+   Password reset uses these too — the emailed link bounces off Supabase back to
+   the Site URL, so a reset link will fail if the origin isn't listed here.
+
+7. **Authentication → Email Templates → Reset Password** must be enabled (it is
+   by default). The default template's `{{ .ConfirmationURL }}` is all the app
+   needs; it returns with `type=recovery` and the app prompts for a new password.
+
 ### 2. Run locally
 
 ```bash
@@ -61,7 +68,24 @@ After that: `git push origin main` → live on the domain in about a minute.
 - **BOARDS**: Score · Career lines · Play time · Awards · Best single-game lines
 - iPhone: Safari → Share → Add to Home Screen
 
+- **Forgot password**: LOGIN → *Forgot your password?* emails a reset link. The
+  link returns to the site and prompts for a new password.
+- **Change password**: PROFILE → CHANGE PASSWORD while signed in.
+
 After pulling schema changes, re-run [`supabase/schema.sql`](./supabase/schema.sql) in the Supabase SQL editor (idempotent).
+
+## Troubleshooting: boards or profile stay empty
+
+The app now prints the actual Postgres error in the status line under the title
+(and to the browser console as `[scores] …`) instead of silently showing an
+empty board. If it still looks empty with no error, run
+[`supabase/diagnose.sql`](./supabase/diagnose.sql) in the SQL editor — it checks,
+in order: whether any rows exist, whether `anon`/`authenticated` have table
+grants, whether RLS policies are present, whether the profile aggregate columns
+applied, whether `record_game_run` is callable, and what an anonymous client
+actually sees. It finishes with `notify pgrst, 'reload schema'`, which is needed
+because PostgREST caches the schema and will keep serving the old shape after a
+migration until told otherwise.
 
 ## Scripts
 
