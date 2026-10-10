@@ -6,6 +6,7 @@ import {
   MAX_CATCH_UP_FRAMES,
   PIECE_COLORS,
   STATE_GAME_OVER,
+  STATE_LINE_CLEAR,
   STATE_PAUSED,
   STATE_PLAYING,
   STATE_START,
@@ -480,7 +481,12 @@ function syncOverlays(): void {
   if (game.state === lastState) return;
   lastState = game.state;
 
-  document.body.classList.toggle('is-playing', game.state === STATE_PLAYING);
+  // A line clear is still mid-run. Keying the immersive layout on PLAYING
+  // alone meant the app bar reappeared for the ~20 frames of the clear
+  // animation and the board visibly shrank and grew again — the single most
+  // distracting thing on the screen, happening at the best moment in the game.
+  const inRun = game.state === STATE_PLAYING || game.state === STATE_LINE_CLEAR;
+  document.body.classList.toggle('is-playing', inRun);
   overlayStart.hidden = game.state !== STATE_START;
   overlayPaused.hidden = game.state !== STATE_PAUSED;
   overlayGameOver.hidden = game.state !== STATE_GAME_OVER;
