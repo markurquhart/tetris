@@ -206,6 +206,8 @@ const passwordForm = document.querySelector<HTMLFormElement>('#password-form')!;
 const passwordNew = document.querySelector<HTMLInputElement>('#password-new')!;
 const passwordConfirm = document.querySelector<HTMLInputElement>('#password-confirm')!;
 const passwordError = document.querySelector<HTMLElement>('#password-error')!;
+const passwordHint = document.querySelector<HTMLElement>('#password-hint')!;
+const btnPasswordCancel = document.querySelector<HTMLButtonElement>('#btn-password-close')!;
 const authName = document.querySelector<HTMLInputElement>('#auth-name')!;
 const authEmail = document.querySelector<HTMLInputElement>('#auth-email')!;
 const authPassword = document.querySelector<HTMLInputElement>('#auth-password')!;
@@ -396,18 +398,45 @@ btnAuthOpen.addEventListener('click', openAuth);
 btnAuthOpenSide?.addEventListener('click', openAuth);
 document.querySelector('#btn-auth-close')?.addEventListener('click', closeAuth);
 
-function openPasswordReset(): void {
+/**
+ * Recovery is a one-way door: the only exits are "set a password" or "sign
+ * out". A voluntary change from PROFILE is an ordinary dialog you can cancel.
+ */
+let passwordFlow: 'recovery' | 'voluntary' = 'voluntary';
+
+function openPasswordReset(flow: 'recovery' | 'voluntary'): void {
+  passwordFlow = flow;
   passwordError.hidden = true;
   passwordError.textContent = '';
   passwordNew.value = '';
   passwordConfirm.value = '';
+
+  const recovery = flow === 'recovery';
+  passwordHint.textContent = recovery
+    ? 'Set a new password to finish resetting your account. You will sign in again afterwards.'
+    : 'Choose a new password for your account.';
+  btnPasswordCancel.textContent = recovery ? 'CANCEL & SIGN OUT' : 'CANCEL';
+
   closeAuth();
   if (!passwordModal.open) passwordModal.showModal();
 }
 
-// Arriving from a reset email: Supabase signs us into a recovery session, then
-// we immediately ask for the replacement password.
-auth.onPasswordRecovery(openPasswordReset);
+// A recovery link necessarily establishes a session — that is what authorises
+// updateUser(). It must not be usable as a back door into the game, so Esc is
+// refused and the only way out without setting a password is signing out.
+passwordModal.addEventListener('cancel', (e) => {
+  if (passwordFlow === 'recovery') e.preventDefault();
+});
+
+async function abandonRecovery(): Promise<void> {
+  passwordFlow = 'voluntary';
+  if (passwordModal.open) passwordModal.close();
+  await auth.signOut();
+  await scores.refresh();
+  refreshHud();
+}
+
+auth.onPasswordRecovery(() => openPasswordReset('recovery'));
 
 btnForgot.addEventListener('click', async () => {
   authError.hidden = true;
@@ -428,10 +457,14 @@ btnForgot.addEventListener('click', async () => {
 
 document.querySelector('#btn-change-password')?.addEventListener('click', () => {
   closeProfile();
-  openPasswordReset();
+  openPasswordReset('voluntary');
 });
 
-document.querySelector('#btn-password-close')?.addEventListener('click', () => {
+btnPasswordCancel.addEventListener('click', () => {
+  if (passwordFlow === 'recovery') {
+    void abandonRecovery();
+    return;
+  }
   if (passwordModal.open) passwordModal.close();
 });
 
@@ -452,9 +485,24 @@ passwordForm.addEventListener('submit', async (e) => {
     return;
   }
 
+  const wasRecovery = passwordFlow === 'recovery';
+  passwordFlow = 'voluntary';
   passwordNew.value = '';
   passwordConfirm.value = '';
   passwordModal.close();
+
+  if (wasRecovery) {
+    // Don't let the emailed link double as a login. Burn the recovery session
+    // and make them authenticate with the password they just chose.
+    await auth.signOut();
+    await scores.refresh();
+    refreshHud();
+    openAuth();
+    authNotice.hidden = false;
+    authNotice.textContent = 'Password updated — sign in with your new password.';
+    return;
+  }
+
   await scores.refresh();
   refreshHud();
 });
