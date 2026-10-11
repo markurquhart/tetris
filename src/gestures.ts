@@ -121,6 +121,14 @@ export function getLastGestureSource(): 'touch' | 'pointer' | null {
  * Playfield gestures. Finger input is driven by TouchEvents; mouse/pen by PointerEvents.
  * Touch and pointer never process the same contact (avoids double seeks).
  */
+/** Overlay controls live inside the playfield; gestures must not steal their clicks. */
+function isInteractiveTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return false;
+  return Boolean(
+    target.closest('button, a, input, select, textarea, label, [role="button"]'),
+  );
+}
+
 export function bindPlayfieldGestures(
   surface: HTMLElement,
   input: InputHandler,
@@ -392,6 +400,9 @@ export function bindPlayfieldGestures(
   surface.addEventListener(
     'touchstart',
     (e) => {
+      // Resume / Restart / Sound / Start sit in overlays under #playfield.
+      // Capturing those touches kills the subsequent click and freezes pause.
+      if (isInteractiveTarget(e.target)) return;
       // Always preventDefault on the playfield — stops scroll, 300ms click
       // delay, and compatibility mouse events that make first contact mushy.
       e.preventDefault();
@@ -441,6 +452,7 @@ export function bindPlayfieldGestures(
     (e) => {
       if (e.pointerType === 'touch') return; // TouchEvent path owns fingers
       if (e.pointerType === 'mouse' && e.button !== 0) return;
+      if (isInteractiveTarget(e.target)) return;
       if (source !== 'none') return;
       e.preventDefault();
       pointerId = e.pointerId;
