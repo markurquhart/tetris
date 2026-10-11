@@ -418,8 +418,9 @@ export function bindPlayfieldGestures(
   surface.addEventListener(
     'touchmove',
     (e) => {
-      e.preventDefault();
+      // Don't cancel default when we skipped the contact (e.g. overlay button).
       if (source !== 'touch' || touchId === null) return;
+      e.preventDefault();
       for (let i = 0; i < e.changedTouches.length; i++) {
         const t = e.changedTouches[i];
         if (t.identifier === touchId) {
@@ -432,8 +433,10 @@ export function bindPlayfieldGestures(
   );
 
   const finishTouch = (e: TouchEvent) => {
-    e.preventDefault();
+    // preventDefault on touchend suppresses the synthesized click. Only do it
+    // for gestures we own — overlay Start/Resume need that click on mobile.
     if (source !== 'touch' || touchId === null) return;
+    e.preventDefault();
     for (let i = 0; i < e.changedTouches.length; i++) {
       const t = e.changedTouches[i];
       if (t.identifier === touchId) {
