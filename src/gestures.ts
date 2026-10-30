@@ -22,6 +22,13 @@ const TAP_SLOP_CELLS = 0.28;
 const STEP_CELLS = 0.22;
 /** How far a blocked piece may visually press into the wall. */
 const WALL_SLIDE_CELLS = 0.12;
+/**
+ * Extra finger travel required to leave a column the piece already fits.
+ * Enough to absorb a long drag's overshoot, not enough to feel stuck.
+ */
+const SLOT_ANCHOR_CELLS = 0.55;
+/** Lean toward the next column while anchored, kept under half a cell so the ghost stays put. */
+const SLOT_LEAN_CELLS = 0.28;
 const FLICK_DISTANCE_CELLS = 1.85;
 const FLICK_VELOCITY = 0.55; // px/ms
 const FLICK_MAX_MS = 420;
@@ -40,6 +47,8 @@ export interface GestureHooks {
   getPieceEpoch: () => number;
   seekCol: (col: number) => boolean;
   seekRow: (row: number) => boolean;
+  /** True when `col` is a pocket and stepping `dir` would climb out of it. */
+  holdsSlot: (col: number, dir: -1 | 1) => boolean;
   rotate: () => void;
   hardDrop: () => void;
   hold: () => void;
@@ -78,6 +87,28 @@ export function dragSteps(deltaPx: number, cell: number): number {
   if (abs < STEP_CELLS) return 0;
   const steps = Math.floor(abs - STEP_CELLS) + 1;
   return deltaPx < 0 ? -steps : steps;
+}
+
+/**
+ * Cap a drag that has already reached a fitting column. The piece stays there
+ * until the finger travels SLOT_ANCHOR_CELLS past the normal step, then it
+ * releases. It never pulls a piece toward a hole it has not reached.
+ */
+export function anchoredOffset(
+  fingerCells: number,
+  rawOffset: number,
+  grabCol: number,
+  holdsSlot: (col: number, dir: -1 | 1) => boolean,
+): number {
+  if (rawOffset === 0) return 0;
+  const dir: -1 | 1 = rawOffset < 0 ? -1 : 1;
+  for (let step = dir; Math.abs(step) <= Math.abs(rawOffset); step += dir) {
+    const fromCol = grabCol + (step - dir);
+    if (!holdsSlot(fromCol, dir)) continue;
+    const needed = STEP_CELLS + Math.abs(step) - 1 + SLOT_ANCHOR_CELLS;
+    if (Math.abs(fingerCells) < needed) return step - dir;
+  }
+  return rawOffset;
 }
 
 /**
@@ -201,7 +232,8 @@ export function bindPlayfieldGestures(
     const col = hooks.getCol();
     if (col === null) return false;
     const fingerCells = (clientX - grabX) / scale.cell;
-    const offset = dragSteps(clientX - grabX, scale.cell);
+    const rawOffset = dragSteps(clientX - grabX, scale.cell);
+    const offset = anchoredOffset(fingerCells, rawOffset, grabCol, hooks.holdsSlot);
     const desired = grabCol + offset;
     let moved = false;
     if (desired !== col) {
@@ -210,7 +242,12 @@ export function bindPlayfieldGestures(
     }
     const appliedCol = hooks.getCol();
     const applied = appliedCol === null ? 0 : appliedCol - grabCol;
-    const slide = fingerSlide(fingerCells, applied, Math.abs(offset) > Math.abs(applied));
+    let slide = fingerSlide(fingerCells, applied, Math.abs(rawOffset) > Math.abs(applied));
+    if (offset !== rawOffset) {
+      const leanDir = Math.sign(fingerCells - offset) || 0;
+      const lean = leanDir * Math.min(Math.abs(fingerCells - offset), SLOT_LEAN_CELLS);
+      if (Math.abs(slide) > Math.abs(lean)) slide = lean;
+    }
     const slideChanged = setDragSlide(slide, 0);
     if (moved || slideChanged) bump();
     return moved;

@@ -589,6 +589,7 @@ bindPlayfieldGestures(
     getPieceEpoch: () => game.pieceEpoch,
     seekCol: (col) => game.touchSeekCol(col),
     seekRow: (row) => game.touchSeekRow(row),
+    holdsSlot: (col, dir) => game.holdsSlot(col, dir),
     rotate: () => game.touchRotate(),
     hardDrop: () => game.touchHardDrop(),
     hold: () => game.touchHold(),

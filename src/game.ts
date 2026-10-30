@@ -564,4 +564,27 @@ export class Game {
     }
     return row;
   }
+
+  /**
+   * The piece is already in a gap, and moving `dir` would sit it at least two
+   * rows higher. Used to resist a drag that would overshoot that gap.
+   */
+  holdsSlot(col: number, dir: -1 | 1): boolean {
+    const here = this.landingDepth(col);
+    const next = this.landingDepth(col + dir);
+    if (here === null || next === null) return false;
+    return here >= next + 2;
+  }
+
+  /** Lowest cell row of a legal landing in `col`. Larger means deeper. */
+  private landingDepth(col: number): number | null {
+    const piece = this.currentPiece;
+    const row = this.ghostRowAt(col);
+    if (!piece || row === null) return null;
+    let deepest = row;
+    for (const [cellRow] of piece.getCellsAt(row, col, piece.rotationState)) {
+      if (cellRow > deepest) deepest = cellRow;
+    }
+    return deepest;
+  }
 }
