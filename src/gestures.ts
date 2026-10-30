@@ -10,14 +10,15 @@ import type { InputHandler } from './input';
  *   - snappy first-cell commit without waiting on a heavy precision gate
  *   - axis lock engages early once direction is clear
  *
- * Precision vs travel (unchanged intent):
- *   Precision: at most 1 cell until finger travels TRAVEL_UNLOCK
- *   Travel: round(delta / cell) for board-crossing drags
+ * The piece steps when the finger is STEP_CELLS into the next column and
+ * keeps that pace for the whole drag, so it stays with the finger.
  */
 const TAP_SLOP_CELLS = 0.28;
-/** First 1-cell nudge — kept under half a cell so first contact feels immediate. */
-const PRECISION_COMMIT_CELLS = 0.38;
-const TRAVEL_UNLOCK_CELLS = 2.15;
+/**
+ * How far into a cell the finger must travel before the piece takes that step.
+ * Under half a cell so a drag leads the finger instead of chasing it.
+ */
+const STEP_CELLS = 0.36;
 const FLICK_DISTANCE_CELLS = 1.85;
 const FLICK_VELOCITY = 0.55; // px/ms
 const FLICK_MAX_MS = 420;
@@ -48,8 +49,6 @@ interface Scale {
   axisLock: number;
   holdUp: number;
   flickDist: number;
-  precisionCommit: number;
-  travelUnlock: number;
 }
 
 function readScale(surface: HTMLElement): Scale {
@@ -62,52 +61,20 @@ function readScale(surface: HTMLElement): Scale {
     axisLock: cell * AXIS_LOCK_CELLS,
     holdUp: cell * HOLD_SWIPE_UP_CELLS,
     flickDist: cell * FLICK_DISTANCE_CELLS,
-    precisionCommit: cell * PRECISION_COMMIT_CELLS,
-    travelUnlock: cell * TRAVEL_UNLOCK_CELLS,
   };
 }
 
-function horizontalOffset(
-  dx: number,
-  cell: number,
-  travel: boolean,
-  precisionCommit: number,
-  travelUnlock: number,
-): { offset: number; travel: boolean } {
-  const abs = Math.abs(dx);
-  const sign = dx < 0 ? -1 : 1;
-  let nowTravel = travel;
-  if (!nowTravel && abs >= travelUnlock) nowTravel = true;
-
-  if (!nowTravel) {
-    if (abs < precisionCommit) return { offset: 0, travel: false };
-    return { offset: sign, travel: false };
-  }
-
-  const raw = dx / cell;
-  if (Math.abs(raw) < PRECISION_COMMIT_CELLS) return { offset: 0, travel: true };
-  return { offset: Math.round(raw), travel: true };
-}
-
-function verticalDownOffset(
-  dy: number,
-  cell: number,
-  travel: boolean,
-  precisionCommit: number,
-  travelUnlock: number,
-): { offset: number; travel: boolean } {
-  if (dy <= 0) return { offset: 0, travel };
-  const abs = dy;
-  let nowTravel = travel;
-  if (!nowTravel && abs >= travelUnlock) nowTravel = true;
-
-  if (!nowTravel) {
-    if (abs < precisionCommit) return { offset: 0, travel: false };
-    return { offset: 1, travel: false };
-  }
-
-  if (abs < cell * PRECISION_COMMIT_CELLS) return { offset: 0, travel: true };
-  return { offset: Math.max(0, Math.round(dy / cell)), travel: true };
+/**
+ * Cells a finger delta should move the piece. Steps at STEP_CELLS, then every
+ * full cell after that (0.36 → 1, 1.36 → 2). Zero until the first step, so a
+ * tap still doesn't nudge.
+ */
+export function dragSteps(deltaPx: number, cell: number): number {
+  if (!(cell > 0) || deltaPx === 0) return 0;
+  const abs = Math.abs(deltaPx) / cell;
+  if (abs < STEP_CELLS) return 0;
+  const steps = Math.floor(abs - STEP_CELLS) + 1;
+  return deltaPx < 0 ? -steps : steps;
 }
 
 /** Last contact source that began a gesture (`touch` | `pointer`). For demos/tests. */
@@ -153,8 +120,6 @@ export function bindPlayfieldGestures(
   let grabRow = 0;
   let grabEpoch = -1;
   let axisLock: 'none' | 'h' | 'v' = 'none';
-  let hTravel = false;
-  let vTravel = false;
   let didHorizontal = false;
   let didVertical = false;
   let holdTimer: number | null = null;
@@ -182,8 +147,6 @@ export function bindPlayfieldGestures(
     grabCol = col;
     grabRow = row;
     grabEpoch = hooks.getPieceEpoch();
-    hTravel = false;
-    vTravel = false;
     return true;
   };
 
@@ -198,14 +161,7 @@ export function bindPlayfieldGestures(
     if (!ensureGrab(clientX, clientY)) return false;
     const col = hooks.getCol();
     if (col === null) return false;
-    const { offset, travel } = horizontalOffset(
-      clientX - grabX,
-      scale.cell,
-      hTravel,
-      scale.precisionCommit,
-      scale.travelUnlock,
-    );
-    hTravel = travel;
+    const offset = dragSteps(clientX - grabX, scale.cell);
     const desired = grabCol + offset;
     if (desired === col) return false;
     const moved = hooks.seekCol(desired);
@@ -217,14 +173,7 @@ export function bindPlayfieldGestures(
     if (!ensureGrab(clientX, clientY)) return false;
     const row = hooks.getRow();
     if (row === null) return false;
-    const { offset, travel } = verticalDownOffset(
-      clientY - grabY,
-      scale.cell,
-      vTravel,
-      scale.precisionCommit,
-      scale.travelUnlock,
-    );
-    vTravel = travel;
+    const offset = Math.max(0, dragSteps(clientY - grabY, scale.cell));
     const desired = grabRow + offset;
     if (desired <= row) return false;
     const moved = hooks.seekRow(desired);
@@ -273,8 +222,6 @@ export function bindPlayfieldGestures(
     startY = lastY = sampleY = clientY;
     startTime = sampleTime = performance.now();
     axisLock = 'none';
-    hTravel = false;
-    vTravel = false;
     didHorizontal = false;
     didVertical = false;
     longPressed = false;
