@@ -548,9 +548,15 @@ function paint(): void {
   renderer.drawBoard(game.board, lineClearProgress ?? 0);
   const slide = getDragSlide();
   if (game.state === STATE_PLAYING && game.currentPiece) {
-    const ghostRow = game.getGhostRow();
-    if (ghostRow !== null && ghostRow > game.currentPiece.row) {
-      renderer.drawGhost(game.currentPiece, ghostRow, slide.x, slide.y);
+    const piece = game.currentPiece;
+    let ghostCol = piece.col + Math.round(slide.x);
+    let ghostRow = game.ghostRowAt(ghostCol);
+    if (ghostRow === null && ghostCol !== piece.col) {
+      ghostCol = piece.col;
+      ghostRow = game.ghostRowAt(ghostCol);
+    }
+    if (ghostRow !== null && ghostRow > piece.row) {
+      renderer.drawGhost(piece, ghostRow, ghostCol - piece.col);
     }
   }
   renderer.drawPiece(game.currentPiece, slide.x, slide.y);

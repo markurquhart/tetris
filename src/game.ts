@@ -545,6 +545,23 @@ export class Game {
 
   getGhostRow(): number | null {
     if (!this.currentPiece) return null;
-    return this.currentPiece.getGhostPosition(this.board);
+    return this.ghostRowAt(this.currentPiece.col);
+  }
+
+  /**
+   * Lowest row this piece can legally occupy in `col`. Null when that column
+   * isn't a real placement — the landing preview must never intersect the stack.
+   */
+  ghostRowAt(col: number): number | null {
+    const piece = this.currentPiece;
+    if (!piece) return null;
+    if (!this.board.cellsValid(piece.getCellsAt(piece.row, col, piece.rotationState))) {
+      return null;
+    }
+    let row = piece.row;
+    while (this.board.cellsValid(piece.getCellsAt(row + 1, col, piece.rotationState))) {
+      row += 1;
+    }
+    return row;
   }
 }

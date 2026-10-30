@@ -203,17 +203,16 @@ export class Renderer {
     }
   }
 
-  drawGhost(piece: Tetromino | null, ghostRow: number | null, shiftX = 0, shiftY = 0): void {
+  /** Grid-aligned landing preview. `colOffset` is whole columns, never a finger slide. */
+  drawGhost(piece: Tetromino | null, ghostRow: number | null, colOffset = 0): void {
     if (!piece || ghostRow === null) return;
-    const cells = piece.getCellsAt(ghostRow, piece.col, piece.rotationState);
-    const ox = shiftX * CELL_SIZE;
-    const oy = shiftY * CELL_SIZE;
+    const cells = piece.getCellsAt(ghostRow, piece.col + colOffset, piece.rotationState);
 
     for (const [row, col] of cells) {
       const visibleRow = row - BOARD_HIDDEN_ROWS;
       if (visibleRow < 0) continue;
-      const x = BOARD_X + col * CELL_SIZE + ox;
-      const y = BOARD_Y + visibleRow * CELL_SIZE + oy;
+      const x = BOARD_X + col * CELL_SIZE;
+      const y = BOARD_Y + visibleRow * CELL_SIZE;
 
       this.ctx.fillStyle = rgb(piece.color, GHOST_ALPHA / 255 / 1.7);
       roundRect(this.ctx, x + 2, y + 2, CELL_SIZE - 4, CELL_SIZE - 4, 5);
