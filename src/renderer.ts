@@ -91,11 +91,13 @@ export class Renderer {
     row: number,
     col: number,
     color: RGB,
+    ox = 0,
+    oy = 0,
   ): void {
     target.drawImage(
       this.getCellSprite(color),
-      BOARD_X + col * CELL_SIZE,
-      BOARD_Y + row * CELL_SIZE,
+      BOARD_X + col * CELL_SIZE + ox,
+      BOARD_Y + row * CELL_SIZE + oy,
     );
   }
 
@@ -191,23 +193,27 @@ export class Renderer {
     }
   }
 
-  drawPiece(piece: Tetromino | null): void {
+  drawPiece(piece: Tetromino | null, shiftX = 0, shiftY = 0): void {
     if (!piece) return;
+    const ox = shiftX * CELL_SIZE;
+    const oy = shiftY * CELL_SIZE;
     for (const [row, col] of piece.getCells()) {
       const visibleRow = row - BOARD_HIDDEN_ROWS;
-      if (visibleRow >= 0) this.drawCellOn(this.ctx, visibleRow, col, piece.color);
+      if (visibleRow >= 0) this.drawCellOn(this.ctx, visibleRow, col, piece.color, ox, oy);
     }
   }
 
-  drawGhost(piece: Tetromino | null, ghostRow: number | null): void {
+  drawGhost(piece: Tetromino | null, ghostRow: number | null, shiftX = 0, shiftY = 0): void {
     if (!piece || ghostRow === null) return;
     const cells = piece.getCellsAt(ghostRow, piece.col, piece.rotationState);
+    const ox = shiftX * CELL_SIZE;
+    const oy = shiftY * CELL_SIZE;
 
     for (const [row, col] of cells) {
       const visibleRow = row - BOARD_HIDDEN_ROWS;
       if (visibleRow < 0) continue;
-      const x = BOARD_X + col * CELL_SIZE;
-      const y = BOARD_Y + visibleRow * CELL_SIZE;
+      const x = BOARD_X + col * CELL_SIZE + ox;
+      const y = BOARD_Y + visibleRow * CELL_SIZE + oy;
 
       this.ctx.fillStyle = rgb(piece.color, GHOST_ALPHA / 255 / 1.7);
       roundRect(this.ctx, x + 2, y + 2, CELL_SIZE - 4, CELL_SIZE - 4, 5);

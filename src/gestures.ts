@@ -10,15 +10,18 @@ import type { InputHandler } from './input';
  *   - snappy first-cell commit without waiting on a heavy precision gate
  *   - axis lock engages early once direction is clear
  *
- * The piece steps when the finger is STEP_CELLS into the next column and
- * keeps that pace for the whole drag, so it stays with the finger.
+ * The column locks when the finger is STEP_CELLS into it. Between locks the
+ * sprite is drawn on the finger, so a short nudge moves immediately instead
+ * of sitting still until the next cell.
  */
 const TAP_SLOP_CELLS = 0.28;
 /**
- * How far into a cell the finger must travel before the piece takes that step.
- * Under half a cell so a drag leads the finger instead of chasing it.
+ * How far into a cell the finger must travel before that column locks.
+ * Kept small so a one-column nudge doesn't feel like it needs a full swipe.
  */
-const STEP_CELLS = 0.36;
+const STEP_CELLS = 0.22;
+/** How far a blocked piece may visually press into the wall. */
+const WALL_SLIDE_CELLS = 0.12;
 const FLICK_DISTANCE_CELLS = 1.85;
 const FLICK_VELOCITY = 0.55; // px/ms
 const FLICK_MAX_MS = 420;
@@ -66,7 +69,7 @@ function readScale(surface: HTMLElement): Scale {
 
 /**
  * Cells a finger delta should move the piece. Steps at STEP_CELLS, then every
- * full cell after that (0.36 → 1, 1.36 → 2). Zero until the first step, so a
+ * full cell after that (0.22 → 1, 1.22 → 2). Zero until the first step, so a
  * tap still doesn't nudge.
  */
 export function dragSteps(deltaPx: number, cell: number): number {
@@ -75,6 +78,42 @@ export function dragSteps(deltaPx: number, cell: number): number {
   if (abs < STEP_CELLS) return 0;
   const steps = Math.floor(abs - STEP_CELLS) + 1;
   return deltaPx < 0 ? -steps : steps;
+}
+
+/**
+ * Visual offset, in cells, that puts the sprite on the finger while the
+ * column underneath catches up. `applied` is how far the piece actually moved.
+ */
+export function fingerSlide(fingerCells: number, applied: number, blocked: boolean): number {
+  // Ignore contact noise so a resting finger doesn't twitch the piece.
+  if (!blocked && applied === 0 && Math.abs(fingerCells) < 0.05) return 0;
+  const raw = fingerCells - applied;
+  if (!blocked) {
+    if (raw > 1) return 1;
+    if (raw < -1) return -1;
+    return raw;
+  }
+  const dir = Math.sign(fingerCells - applied);
+  if (dir === 0) return 0;
+  return dir * Math.min(Math.abs(raw), WALL_SLIDE_CELLS);
+}
+
+export interface DragSlide {
+  x: number;
+  y: number;
+}
+
+const dragSlide: DragSlide = { x: 0, y: 0 };
+
+export function getDragSlide(): DragSlide {
+  return dragSlide;
+}
+
+function setDragSlide(x: number, y: number): boolean {
+  if (Math.abs(dragSlide.x - x) < 0.01 && Math.abs(dragSlide.y - y) < 0.01) return false;
+  dragSlide.x = x;
+  dragSlide.y = y;
+  return true;
 }
 
 /** Last contact source that began a gesture (`touch` | `pointer`). For demos/tests. */
@@ -161,11 +200,19 @@ export function bindPlayfieldGestures(
     if (!ensureGrab(clientX, clientY)) return false;
     const col = hooks.getCol();
     if (col === null) return false;
+    const fingerCells = (clientX - grabX) / scale.cell;
     const offset = dragSteps(clientX - grabX, scale.cell);
     const desired = grabCol + offset;
-    if (desired === col) return false;
-    const moved = hooks.seekCol(desired);
-    if (moved) didHorizontal = true;
+    let moved = false;
+    if (desired !== col) {
+      moved = hooks.seekCol(desired);
+      if (moved) didHorizontal = true;
+    }
+    const appliedCol = hooks.getCol();
+    const applied = appliedCol === null ? 0 : appliedCol - grabCol;
+    const slide = fingerSlide(fingerCells, applied, Math.abs(offset) > Math.abs(applied));
+    const slideChanged = setDragSlide(slide, 0);
+    if (moved || slideChanged) bump();
     return moved;
   };
 
@@ -173,11 +220,19 @@ export function bindPlayfieldGestures(
     if (!ensureGrab(clientX, clientY)) return false;
     const row = hooks.getRow();
     if (row === null) return false;
+    const fingerCells = Math.max(0, (clientY - grabY) / scale.cell);
     const offset = Math.max(0, dragSteps(clientY - grabY, scale.cell));
     const desired = grabRow + offset;
-    if (desired <= row) return false;
-    const moved = hooks.seekRow(desired);
-    if (moved) didVertical = true;
+    let moved = false;
+    if (desired > row) {
+      moved = hooks.seekRow(desired);
+      if (moved) didVertical = true;
+    }
+    const appliedRow = hooks.getRow();
+    const applied = appliedRow === null ? 0 : appliedRow - grabRow;
+    const slide = fingerSlide(fingerCells, applied, offset > applied);
+    const slideChanged = setDragSlide(0, slide);
+    if (moved || slideChanged) bump();
     return moved;
   };
 
@@ -341,6 +396,7 @@ export function bindPlayfieldGestures(
     source = 'none';
     pointerId = null;
     touchId = null;
+    if (setDragSlide(0, 0)) bump();
   };
 
   // ── Finger path: real TouchEvents (primary on mobile) ───────────────────

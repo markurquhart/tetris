@@ -14,7 +14,7 @@ import {
   WINDOW_WIDTH,
 } from './constants';
 import { Game } from './game';
-import { bindPlayfieldGestures, preventMobilePageZoom } from './gestures';
+import { bindPlayfieldGestures, getDragSlide, preventMobilePageZoom } from './gestures';
 import { InputHandler } from './input';
 import { drawPiecePreview, Renderer } from './renderer';
 import { Router } from './router';
@@ -546,13 +546,14 @@ let paintQueued = false;
 function paint(): void {
   renderer.drawBoardBackground();
   renderer.drawBoard(game.board, lineClearProgress ?? 0);
+  const slide = getDragSlide();
   if (game.state === STATE_PLAYING && game.currentPiece) {
     const ghostRow = game.getGhostRow();
     if (ghostRow !== null && ghostRow > game.currentPiece.row) {
-      renderer.drawGhost(game.currentPiece, ghostRow);
+      renderer.drawGhost(game.currentPiece, ghostRow, slide.x, slide.y);
     }
   }
-  renderer.drawPiece(game.currentPiece);
+  renderer.drawPiece(game.currentPiece, slide.x, slide.y);
 
   syncHud();
   syncOverlays();
